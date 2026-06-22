@@ -137,13 +137,28 @@ def resolve_ticker(name: str):
 # SNAPSHOT (ONLY CHANGE = DEBUG LINE ADDED)
 # ===================================================
 def get_snapshot(symbol):
-    print("ENTERED get_snapshot:", symbol)
-
     try:
         t = yf.Ticker(symbol)
-        print("CREATED TICKER:", symbol)
 
-        info = t.get_info()
+        # ---------------------------
+        # PRICE (use history instead of .info)
+        # ---------------------------
+        hist = t.history(period="5d")
+
+        price = None
+        if hist is not None and not hist.empty:
+            price = float(hist["Close"].iloc[-1])
+
+        # ---------------------------
+        # EPS (still via info, but guarded heavily)
+        # ---------------------------
+        info = {}
+        try:
+            info = t.get_info() or {}
+        except:
+            info = {}
+
+        eps = info.get("trailingEps") or info.get("forwardEps")
 
         exchange_code = info.get("exchange")
 
@@ -153,9 +168,15 @@ def get_snapshot(symbol):
         if exchange_code in MARKET_MAP:
             market_code, market_name = MARKET_MAP[exchange_code]
 
+        print("DEBUG SNAPSHOT RAW:", {
+            "price": price,
+            "eps": eps,
+            "exchange": exchange_code
+        })
+
         return {
-            "price": info.get("regularMarketPrice"),
-            "eps": info.get("trailingEps") or info.get("forwardEps"),
+            "price": price,
+            "eps": eps,
             "industry": info.get("industry") or "Unknown",
             "sector": info.get("sector"),
             "exchange_code": exchange_code,
@@ -163,7 +184,8 @@ def get_snapshot(symbol):
             "market_name": market_name
         }
 
-    except:
+    except Exception as e:
+        print("SNAPSHOT ERROR:", str(e))
         return {
             "price": None,
             "eps": None,
@@ -173,7 +195,6 @@ def get_snapshot(symbol):
             "market_code": None,
             "market_name": None
         }
-
 
 # ===================================================
 # MAIN
