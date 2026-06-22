@@ -143,7 +143,7 @@ def get_snapshot(symbol):
         t = yf.Ticker(symbol)
         print("CREATED TICKER:", symbol)
 
-        info = t.info
+        info = t.get_info()
 
         exchange_code = info.get("exchange")
 
