@@ -137,6 +137,7 @@ def resolve_ticker(name: str):
 # SNAPSHOT (ONLY CHANGE = DEBUG LINE ADDED)
 # ===================================================
 def get_snapshot(symbol):
+    print("🔥 SNAPSHOT FUNCTION VERSION 2026-TEST-XYZ")
     try:
         t = yf.Ticker(symbol)
 
