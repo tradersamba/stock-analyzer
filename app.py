@@ -89,7 +89,7 @@ def resolve_ticker(name: str):
 
             try:
                 t = yf.Ticker(symbol)
-                info = t.info
+                info = t.fast_info
 
                 price = info.get("regularMarketPrice")
                 eps = info.get("trailingEps") or info.get("forwardEps")
