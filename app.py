@@ -157,29 +157,51 @@ def resolve_ticker(name: str):
 
 
 # ===================================================
-# SNAPSHOT (UPDATED WITH MARKET INFO)
+# SNAPSHOT (FIXED FOR CLOUD RELIABILITY)
 # ===================================================
 def get_snapshot(symbol):
     try:
         t = yf.Ticker(symbol)
-        info = t.info
 
-        exchange_code = info.get("exchange")
+        # PRICE (cloud-safe)
+        price = None
 
-        market_code = None
-        market_name = None
+        try:
+            price = t.fast_info.get("last_price")
+        except:
+            pass
 
-        if exchange_code in MARKET_MAP:
-            market_code, market_name = MARKET_MAP[exchange_code]
+        if price is None:
+            try:
+                hist = t.history(period="1d")
+                if not hist.empty:
+                    price = float(hist["Close"].iloc[-1])
+            except:
+                pass
+
+        # INFO (avoid .info)
+        eps = None
+        industry = "Unknown"
+        sector = None
+        exchange_code = None
+
+        try:
+            info = t.get_info()
+            eps = info.get("trailingEps") or info.get("forwardEps")
+            industry = info.get("industry") or "Unknown"
+            sector = info.get("sector")
+            exchange_code = info.get("exchange")
+        except:
+            pass
 
         return {
-            "price": info.get("regularMarketPrice"),
-            "eps": info.get("trailingEps") or info.get("forwardEps"),
-            "industry": info.get("industry") or "Unknown",
-            "sector": info.get("sector"),
+            "price": price,
+            "eps": eps,
+            "industry": industry,
+            "sector": sector,
             "exchange_code": exchange_code,
-            "market_code": market_code,
-            "market_name": market_name
+            "market_code": None,
+            "market_name": None
         }
 
     except:
@@ -278,28 +300,20 @@ def lookup(name: str):
 
     return {
         "input": name,
-
-        # unchanged ticker + market
         "ticker": ticker,
         "market": (
             f"{target.get('market_code') or 'UNK'} - "
             f"{target.get('market_name') or 'Unknown Exchange'}"
         ),
-
         "price": target["price"],
         "eps": target["eps"],
         "pe": pe,
-
-        # ✔ ADDED EXACTLY AS REQUESTED (NO OTHER CHANGES)
         "industry_raw": raw_industry,
         "industry_used": industry,
-
         "peers": peers,
         "valuation_peers": valuation_peers,
         "excluded_peers": excluded_peers,
-
         "peer_median_pe": peer_median,
-
         "assessment": {
             "rating": rating,
             "explanation": explanation
