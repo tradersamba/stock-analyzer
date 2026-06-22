@@ -137,7 +137,7 @@ def resolve_ticker(name: str):
 # SNAPSHOT (ONLY CHANGE = DEBUG LINE ADDED)
 # ===================================================
 def get_snapshot(symbol):
-    print("🔥 SNAPSHOT FUNCTION VERSION 2026-TEST-XYZ")
+    print("DEBUG SNAPSHOT RAW:", {"price": price, "eps": eps, "exchange": exchange_code})
     try:
         t = yf.Ticker(symbol)
 
@@ -161,7 +161,7 @@ def get_snapshot(symbol):
 
         eps = info.get("trailingEps") or info.get("forwardEps")
 
-        exchange_code = info.get("exchange")
+        exchange_code = info.get("exchange") or info.get("fullExchangeName")
 
         market_code = None
         market_name = None
