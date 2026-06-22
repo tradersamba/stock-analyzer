@@ -194,7 +194,10 @@ def lookup(name: str):
             cache[sym] = get_snapshot(sym)
         return cache[sym]
 
+    print("🔵 ABOUT TO CALL SNAP WITH:", ticker)
     target = snap(ticker)
+    print("🟢 RETURNED FROM SNAP")
+
     pe = compute_pe(target["price"], target["eps"])
 
     raw_industry = target["industry"]
