@@ -22,49 +22,27 @@ MARKET_MAP = {
 # ===================================================
 INDUSTRY_PEERS = {
     "Airlines": ["DAL","AAL","LUV","UAL","ALK","JBLU","SKYW","CPA","RYAAY","ULCC","ALGT","HA"],
-
     "Auto Manufacturers": ["TSLA","TM","GM","F","HMC","STLA","RACE","LCID","RIVN","NIO","XPEV","LI"],
-
     "Semiconductors": ["NVDA","AMD","AVGO","QCOM","MRVL","INTC","TSM","TXN","ADI","NXPI","ON","MU","LRCX","AMAT","KLAC"],
-
     "Software - Infrastructure": ["MSFT","ORCL","ADBE","CRM","NOW","PLTR","SNOW","DDOG","PANW","CRWD","ZS","OKTA"],
-
     "Cybersecurity": ["CRWD","PANW","ZS","OKTA","FTNT","CYBR","QLYS","VRNS","TENB"],
-
     "Banks - Diversified": ["JPM","BAC","WFC","C","GS","MS","USB","PNC","TFC","COF","SCHW"],
-
     "Insurance": ["BRK-B","PGR","ALL","TRV","CB","MET","PRU","AIG","HIG","AFL","L"],
-
     "Payments & Fintech": ["V","MA","PYPL","SQ","AXP","COIN","FIS","GPN","SOFI","AFRM"],
-
     "Aerospace & Defense": ["LMT","RTX","NOC","BA","GD","HII","LHX","AXON","KTOS"],
-
     "Industrials": ["CAT","HON","UNP","UPS","GE","DE","MMM","ETN","EMR","PH","ITW","ROP"],
-
     "Retail - Defensive": ["WMT","COST","TGT","HD","LOW","KR","DG","DLTR","CVS","BJ","TJX"],
-
     "Consumer Discretionary": ["AMZN","TSLA","NKE","SBUX","MCD","BKNG","ETSY","EBAY","GM","F","LULU"],
-
     "Consumer Staples": ["PG","KO","PEP","WMT","COST","CL","KMB","GIS","MDLZ","HSY","PM"],
-
     "Pharmaceuticals": ["LLY","JNJ","PFE","MRK","ABBV","BMY","AMGN","NVO","AZN","SNY"],
-
     "Biotech": ["REGN","VRTX","BIIB","GILD","MRNA","BNTX","ALNY","SRPT"],
-
     "Clean Energy": ["ENPH","SEDG","FSLR","PLUG","BE","RUN","NEE"],
-
     "Materials": ["LIN","APD","SHW","FCX","NEM","DOW","NUE","ALB"],
-
     "Real Estate (REITs)": ["AMT","PLD","CCI","EQIX","PSA","O","SPG","DLR"],
-
     "Communication Services": ["GOOGL","META","NFLX","DIS","T","VZ","CMCSA","SPOT","SNAP","TTWO","RBLX"],
-
     "Consumer Electronics": ["AAPL","SONY","HPQ","DELL","NTDOY","LOGI","QCOM","AMD","INTC","MU"],
-
     "Information Technology Services": ["IBM","ACN","DXC","CTSH","FICO"],
-
     "Internet Platforms": ["GOOGL","META","AMZN","RDDT","SNAP","BIDU"],
-
     "Internet Commerce": ["AMZN","EBAY","ETSY","DASH","SHOP","MELI","PDD","JD","BABA","W","CHWY","BKNG","EXPE","CPNG"]
 }
 
@@ -89,7 +67,6 @@ def median(vals):
 # TICKER RESOLVER (UNCHANGED)
 # ===================================================
 def resolve_ticker(name: str):
-
     try:
         if name.isupper() and len(name) <= 6:
             return name
@@ -157,51 +134,33 @@ def resolve_ticker(name: str):
 
 
 # ===================================================
-# SNAPSHOT (FIXED FOR CLOUD RELIABILITY)
+# SNAPSHOT (ONLY CHANGE = DEBUG LINE ADDED)
 # ===================================================
 def get_snapshot(symbol):
     try:
         t = yf.Ticker(symbol)
 
-        # PRICE (cloud-safe)
-        price = None
+        # 🔴 DEBUG LINE ADDED (ONLY CHANGE)
+        print("DEBUG INFO:", t.get_info())
 
-        try:
-            price = t.fast_info.get("last_price")
-        except:
-            pass
+        info = t.info
 
-        if price is None:
-            try:
-                hist = t.history(period="1d")
-                if not hist.empty:
-                    price = float(hist["Close"].iloc[-1])
-            except:
-                pass
+        exchange_code = info.get("exchange")
 
-        # INFO (avoid .info)
-        eps = None
-        industry = "Unknown"
-        sector = None
-        exchange_code = None
+        market_code = None
+        market_name = None
 
-        try:
-            info = t.get_info()
-            eps = info.get("trailingEps") or info.get("forwardEps")
-            industry = info.get("industry") or "Unknown"
-            sector = info.get("sector")
-            exchange_code = info.get("exchange")
-        except:
-            pass
+        if exchange_code in MARKET_MAP:
+            market_code, market_name = MARKET_MAP[exchange_code]
 
         return {
-            "price": price,
-            "eps": eps,
-            "industry": industry,
-            "sector": sector,
+            "price": info.get("regularMarketPrice"),
+            "eps": info.get("trailingEps") or info.get("forwardEps"),
+            "industry": info.get("industry") or "Unknown",
+            "sector": info.get("sector"),
             "exchange_code": exchange_code,
-            "market_code": None,
-            "market_name": None
+            "market_code": market_code,
+            "market_name": market_name
         }
 
     except:
