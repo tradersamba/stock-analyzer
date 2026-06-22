@@ -137,11 +137,11 @@ def resolve_ticker(name: str):
 # SNAPSHOT (ONLY CHANGE = DEBUG LINE ADDED)
 # ===================================================
 def get_snapshot(symbol):
+    print("ENTERED get_snapshot:", symbol)
+
     try:
         t = yf.Ticker(symbol)
-
-        # 🔴 DEBUG LINE ADDED (ONLY CHANGE)
-        print("DEBUG INFO:", t.get_info())
+        print("CREATED TICKER:", symbol)
 
         info = t.info
 
