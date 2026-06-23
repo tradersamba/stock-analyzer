@@ -5,7 +5,7 @@ import os
 import json
 import re
 
-app = FastAPI(title="Peer Valuation Engine v10.6.2 (Finnhub Industry Fixed)", version="10.6.2")
+app = FastAPI(title="Peer Valuation Engine v10.6.3 (Finnhub Industry Authority)", version="10.6.3")
 
 # ===================================================
 # ENV
@@ -71,19 +71,29 @@ def median(vals):
 
 
 # ===================================================
-# FINNHUB INDUSTRY (🔥 FIXED)
+# 🔵 FINNHUB = ONLY SOURCE OF INDUSTRY
 # ===================================================
 def get_finnhub_industry(symbol: str):
     try:
         url = "https://finnhub.io/api/v1/stock/profile2"
+
         resp = requests.get(
             url,
-            params={"symbol": symbol, "token": FINNHUB_API_KEY},
+            params={
+                "symbol": symbol,
+                "token": FINNHUB_API_KEY
+            },
             timeout=5
         ).json()
 
-        industry = resp.get("finnhubIndustry") or "Unknown"
-        sector = resp.get("sector") or "Unknown"
+        industry = resp.get("finnhubIndustry")  # IMPORTANT
+        sector = resp.get("sector")
+
+        # hard debug safety
+        if not industry:
+            industry = "Unknown"
+        if not sector:
+            sector = "Unknown"
 
         return industry, sector
 
@@ -92,7 +102,7 @@ def get_finnhub_industry(symbol: str):
 
 
 # ===================================================
-# LLM NORMALIZER
+# LLM INDUSTRY NORMALIZER
 # ===================================================
 def map_industry_llm(raw_industry: str, sector: str):
     try:
@@ -121,36 +131,36 @@ Return ONLY JSON:
             temperature=0
         )
 
-        content = resp.choices[0].message.content.strip()
-        return json.loads(content)
+        return json.loads(resp.choices[0].message.content.strip())
 
     except Exception:
         return {"industry": None, "confidence": 0.0}
 
 
 # ===================================================
-# INDUSTRY RESOLVER (FINAL FIX)
+# INDUSTRY RESOLVER
 # ===================================================
-def resolve_industry(finnhub_industry, llm_result):
+def resolve_industry(raw_industry, sector, llm_result):
 
     llm_industry = llm_result.get("industry")
     confidence = float(llm_result.get("confidence", 0))
 
-    # 1. trust LLM if confident
+    # 1. Trust LLM if strong
     if llm_industry in INDUSTRY_PEERS and confidence >= 0.6:
         return llm_industry, confidence
 
-    # 2. direct finnhub mapping fallback
+    # 2. Finnhub fallback (IMPORTANT FIX YOU NEED)
+    raw = f"{raw_industry} {sector}".lower()
+
     for industry in INDUSTRY_PEERS:
-        if industry.lower() in (finnhub_industry or "").lower():
+        if industry.lower() in raw:
             return industry, 0.7
 
-    # 3. unknown fallback
     return "Unknown", 0.0
 
 
 # ===================================================
-# FINNHUB SNAPSHOT
+# FINNHUB EPS
 # ===================================================
 EPS_CACHE = {}
 
@@ -163,7 +173,11 @@ def get_eps(symbol: str):
 
         resp = requests.get(
             url,
-            params={"symbol": symbol, "metric": "all", "token": FINNHUB_API_KEY},
+            params={
+                "symbol": symbol,
+                "metric": "all",
+                "token": FINNHUB_API_KEY
+            },
             timeout=5
         ).json()
 
@@ -176,11 +190,12 @@ def get_eps(symbol: str):
 
 
 # ===================================================
-# SNAPSHOT
+# SNAPSHOT (POLYGON PRICE ONLY)
 # ===================================================
 def get_snapshot(symbol):
     try:
         url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
+
         resp = requests.get(url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
 
         price = None
@@ -194,30 +209,33 @@ def get_snapshot(symbol):
 
 
 # ===================================================
+# TICKER RESOLVER (POLYGON ONLY)
+# ===================================================
+def resolve_ticker(name: str):
+    if name.isupper() and len(name) <= 6:
+        return name
+
+    url = "https://api.polygon.io/v3/reference/tickers"
+
+    resp = requests.get(url, params={
+        "search": name,
+        "active": "true",
+        "limit": 10,
+        "apiKey": POLYGON_API_KEY
+    }, timeout=5).json()
+
+    results = resp.get("results", [])
+    if not results:
+        raise HTTPException(400, "No ticker")
+
+    return results[0]["ticker"]
+
+
+# ===================================================
 # MAIN
 # ===================================================
 @app.get("/lookup")
 def lookup(name: str):
-
-    # 1. ticker via polygon (unchanged)
-    def resolve_ticker(name: str):
-        if name.isupper() and len(name) <= 6:
-            return name
-
-        url = "https://api.polygon.io/v3/reference/tickers"
-
-        resp = requests.get(url, params={
-            "search": name,
-            "active": "true",
-            "limit": 10,
-            "apiKey": POLYGON_API_KEY
-        }, timeout=5).json()
-
-        results = resp.get("results", [])
-        if not results:
-            raise HTTPException(400, "No ticker")
-
-        return results[0]["ticker"]
 
     ticker = resolve_ticker(name)
 
@@ -227,13 +245,11 @@ def lookup(name: str):
     eps = get_eps(ticker)
     pe = compute_pe(price, eps)
 
-    # ===================================================
-    # 🔥 FIXED INDUSTRY FLOW
-    # ===================================================
+    # 🔵 FINNHUB INDUSTRY IS NOW SINGLE SOURCE OF TRUTH
     fin_industry, fin_sector = get_finnhub_industry(ticker)
 
     llm_result = map_industry_llm(fin_industry, fin_sector)
-    industry_used, confidence = resolve_industry(fin_industry, llm_result)
+    industry_used, confidence = resolve_industry(fin_industry, fin_sector, llm_result)
 
     peers = INDUSTRY_PEERS.get(industry_used, [])
 
@@ -256,11 +272,14 @@ def lookup(name: str):
     if pe is None:
         rating = "Unknown"
         explanation = "Insufficient data"
+
     elif peer_median is None:
         rating = "Unknown"
         explanation = "Insufficient peer data"
+
     else:
         ratio = pe / peer_median
+
         if ratio < 0.8:
             rating = "Undervalued"
         elif ratio > 1.2:
