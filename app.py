@@ -1,12 +1,20 @@
 from fastapi import FastAPI, HTTPException
-import yfinance as yf
 import numpy as np
+import requests
+import os
 
-app = FastAPI(title="Peer Valuation Engine v9.5", version="9.5")
-
+app = FastAPI(title="Peer Valuation Engine v10 (Polygon Fundamentals)", version="10.0")
 
 # ===================================================
-# MARKET MAPPING (NEW ADDITION)
+# ENV
+# ===================================================
+POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
+
+if not POLYGON_API_KEY:
+    raise Exception("POLYGON_API_KEY not set in environment variables")
+
+# ===================================================
+# MARKET MAPPING
 # ===================================================
 MARKET_MAP = {
     "NMS": ("NSDQ", "Nasdaq"),
@@ -15,7 +23,6 @@ MARKET_MAP = {
     "NYQ": ("NYSE", "New York Stock Exchange"),
     "ASE": ("AMEX", "NYSE American"),
 }
-
 
 # ===================================================
 # PEER UNIVERSE
@@ -46,7 +53,6 @@ INDUSTRY_PEERS = {
     "Internet Commerce": ["AMZN","EBAY","ETSY","DASH","SHOP","MELI","PDD","JD","BABA","W","CHWY","BKNG","EXPE","CPNG"]
 }
 
-
 # ===================================================
 # HELPERS
 # ===================================================
@@ -62,17 +68,68 @@ def median(vals):
         return None
     return float(np.median(np.array(vals)))
 
+# ===================================================
+# EPS (POLYGON FUNDAMENTALS)
+# ===================================================
+def get_eps(symbol):
+    try:
+        url = f"https://api.polygon.io/vX/reference/financials"
+
+        params = {
+            "ticker": symbol,
+            "timeframe": "ttm",
+            "limit": 1,
+            "apiKey": POLYGON_API_KEY
+        }
+
+        resp = requests.get(url, params=params, timeout=5)
+
+        if resp.status_code != 200:
+            return None
+
+        results = resp.json().get("results", [])
+        if not results:
+            return None
+
+        fin = results[0].get("financials", {})
+
+        income = fin.get("income_statement", {})
+        balance = fin.get("balance_sheet", {})
+
+        net_income = income.get("net_income")
+        shares = balance.get("basic_average_shares")
+
+        if net_income is None or shares is None or shares == 0:
+            return None
+
+        return net_income / shares
+
+    except Exception as e:
+        print("EPS ERROR:", str(e))
+        return None
 
 # ===================================================
-# TICKER RESOLVER (UNCHANGED)
+# RESOLVE TICKER
 # ===================================================
 def resolve_ticker(name: str):
     try:
         if name.isupper() and len(name) <= 6:
             return name
 
-        search = yf.Search(name)
-        results = getattr(search, "quotes", None) or getattr(search, "results", None)
+        url = "https://api.polygon.io/v3/reference/tickers"
+        params = {
+            "search": name,
+            "active": "true",
+            "limit": 10,
+            "apiKey": POLYGON_API_KEY
+        }
+
+        resp = requests.get(url, params=params, timeout=5)
+
+        if resp.status_code != 200:
+            raise Exception("Polygon API error")
+
+        results = resp.json().get("results", [])
 
         if not results:
             raise Exception("No results")
@@ -80,109 +137,70 @@ def resolve_ticker(name: str):
         candidates = []
 
         for r in results:
-            symbol = r.get("symbol")
+            symbol = r.get("ticker")
             if not symbol:
                 continue
 
             if len(symbol) > 6 or "." in symbol or "-" in symbol:
                 continue
 
-            try:
-                t = yf.Ticker(symbol)
-                info = t.fast_info
+            score = 0
 
-                price = info.get("regularMarketPrice")
-                eps = info.get("trailingEps") or info.get("forwardEps")
-                market_cap = info.get("marketCap")
+            if name.lower() in (r.get("name") or "").lower():
+                score += 3
 
-                if price is None or price <= 0:
-                    continue
+            if name.lower() in symbol.lower():
+                score += 2
 
-                if market_cap is None and eps is None:
-                    continue
-
-                score = 0
-                if eps is not None:
-                    score += 3
-                if market_cap and market_cap > 1e9:
-                    score += 3
-                score += (r.get("score") or 0) * 0.1
-                if name.lower() in symbol.lower():
-                    score += 1
-
-                candidates.append((symbol, score))
-
-            except:
-                continue
+            candidates.append((symbol, score))
 
         if not candidates:
             raise Exception("No valid candidates")
 
         candidates.sort(key=lambda x: x[1], reverse=True)
-
         return candidates[0][0]
 
-    except Exception:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Cannot find '{name}' in US stock market listings. "
-                f"It may be listed under a different name, be private, "
-                f"or traded in foreign markets."
-            )
-        )
-
+    except Exception as e:
+        print("RESOLVE ERROR:", str(e))
+        raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
 
 # ===================================================
-# SNAPSHOT (ONLY CHANGE = DEBUG LINE ADDED)
+# SNAPSHOT
 # ===================================================
 def get_snapshot(symbol):
-    print("DEBUG SNAPSHOT RAW:", {"price": price, "eps": eps, "exchange": exchange_code})
     try:
-        t = yf.Ticker(symbol)
+        print("🔵 POLYGON SNAPSHOT:", symbol)
 
-        # ---------------------------
-        # PRICE (use history instead of .info)
-        # ---------------------------
-        hist = t.history(period="5d")
+        price_url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
+        price_resp = requests.get(price_url, params={"apiKey": POLYGON_API_KEY}, timeout=5)
+
+        price_json = price_resp.json() if price_resp.status_code == 200 else {}
 
         price = None
-        if hist is not None and not hist.empty:
-            price = float(hist["Close"].iloc[-1])
+        if price_json.get("results"):
+            price = price_json["results"][0].get("c")
 
-        # ---------------------------
-        # EPS (still via info, but guarded heavily)
-        # ---------------------------
-        info = {}
-        try:
-            info = t.get_info() or {}
-        except:
-            info = {}
+        details_url = f"https://api.polygon.io/v3/reference/tickers/{symbol}"
+        details_resp = requests.get(details_url, params={"apiKey": POLYGON_API_KEY}, timeout=5)
 
-        eps = info.get("trailingEps") or info.get("forwardEps")
+        details_json = details_resp.json() if details_resp.status_code == 200 else {}
 
-        exchange_code = info.get("exchange") or info.get("fullExchangeName")
+        details = details_json.get("results", {}) if details_json else {}
 
-        market_code = None
-        market_name = None
-
-        if exchange_code in MARKET_MAP:
-            market_code, market_name = MARKET_MAP[exchange_code]
-
-        print("DEBUG SNAPSHOT RAW:", {
-            "price": price,
-            "eps": eps,
-            "exchange": exchange_code
-        })
+        industry = (
+            details.get("sic_description")
+            or details.get("description")
+            or "Unknown"
+        )
 
         return {
             "price": price,
-            "eps": eps,
-            "industry": info.get("industry") or "Unknown",
-            "sector": info.get("sector"),
-            "exchange_code": exchange_code,
-            "market_code": market_code,
-            "market_name": market_name
+            "eps": get_eps(symbol),
+            "industry": industry,
+            "sector": None,
+            "exchange_code": details.get("primary_exchange"),
+            "market_code": None,
+            "market_name": None
         }
 
     except Exception as e:
@@ -198,7 +216,7 @@ def get_snapshot(symbol):
         }
 
 # ===================================================
-# MAIN
+# MAIN ENDPOINT
 # ===================================================
 @app.get("/lookup")
 def lookup(name: str):
@@ -216,9 +234,7 @@ def lookup(name: str):
             cache[sym] = get_snapshot(sym)
         return cache[sym]
 
-    print("🔵 ABOUT TO CALL SNAP WITH:", ticker)
     target = snap(ticker)
-    print("🟢 RETURNED FROM SNAP")
 
     pe = compute_pe(target["price"], target["eps"])
 
@@ -259,10 +275,7 @@ def lookup(name: str):
 
     elif pe < 0:
         rating = "Not Applicable"
-        explanation = (
-            "The PE Ratio is negative, which means the company is currently not profitable "
-            "and so the metric has no real diagnostic meaning"
-        )
+        explanation = "Negative PE"
 
     elif peer_median is None:
         rating = "Unknown"
@@ -278,17 +291,12 @@ def lookup(name: str):
         else:
             rating = "Fairly Valued"
 
-        explanation = (
-            f"PE ratio of {pe:.2f} is {rating.lower()} compared with peer median PE of {peer_median:.2f}"
-        )
+        explanation = f"PE {pe:.2f} vs peer median {peer_median:.2f}"
 
     return {
         "input": name,
         "ticker": ticker,
-        "market": (
-            f"{target.get('market_code') or 'UNK'} - "
-            f"{target.get('market_name') or 'Unknown Exchange'}"
-        ),
+        "market": target.get("exchange_code") or "UNK",
         "price": target["price"],
         "eps": target["eps"],
         "pe": pe,
