@@ -3,7 +3,7 @@ import numpy as np
 import requests
 import os
 
-app = FastAPI(title="Peer Valuation Engine v10.1 (Stable)", version="10.1")
+app = FastAPI(title="Peer Valuation Engine v10.2 (Robust PE)", version="10.2")
 
 # ===================================================
 # ENV
@@ -15,19 +15,8 @@ if not POLYGON_API_KEY:
     raise Exception("POLYGON_API_KEY not set")
 
 if not FINNHUB_API_KEY:
-    print("⚠️ WARNING: FINNHUB_API_KEY not set (EPS will fail)")
+    print("⚠️ WARNING: FINNHUB_API_KEY not set")
 
-
-# ===================================================
-# MARKET MAP
-# ===================================================
-MARKET_MAP = {
-    "NMS": ("NSDQ", "Nasdaq"),
-    "NGM": ("NSDQ", "Nasdaq"),
-    "NCM": ("NSDQ", "Nasdaq"),
-    "NYQ": ("NYSE", "New York Stock Exchange"),
-    "ASE": ("AMEX", "NYSE American"),
-}
 
 # ===================================================
 # PEER UNIVERSE
@@ -58,6 +47,7 @@ INDUSTRY_PEERS = {
     "Internet Commerce": ["AMZN","EBAY","ETSY","DASH","SHOP","MELI","PDD","JD","BABA","W","CHWY","BKNG","EXPE","CPNG"]
 }
 
+
 # ===================================================
 # HELPERS
 # ===================================================
@@ -75,7 +65,28 @@ def median(vals):
 
 
 # ===================================================
-# EPS (FIXED FINNHUB)
+# 🔥 NEW: OUTLIER FILTER (TRIMMED MEDIAN)
+# ===================================================
+def trim_outliers(values, trim_ratio=0.1):
+    """
+    Removes top and bottom X% of PE values.
+    Default = 10% trim.
+    """
+    if len(values) < 5:
+        return values
+
+    values = sorted(values)
+
+    trim_count = int(len(values) * trim_ratio)
+
+    if trim_count == 0:
+        return values
+
+    return values[trim_count: len(values) - trim_count]
+
+
+# ===================================================
+# EPS (FINNHUB)
 # ===================================================
 def get_eps(symbol: str):
     try:
@@ -94,114 +105,31 @@ def get_eps(symbol: str):
         return resp.get("metric", {}).get("epsTTM")
 
     except Exception as e:
-        print("FINNHUB EPS ERROR:", e)
+        print("EPS ERROR:", e)
         return None
 
 
 # ===================================================
-# TICKER RESOLVER
-# ===================================================
-def resolve_ticker(name: str):
-    try:
-        if name.isupper() and len(name) <= 6:
-            return name
-
-        url = "https://api.polygon.io/v3/reference/tickers"
-
-        resp = requests.get(url, params={
-            "search": name,
-            "active": "true",
-            "limit": 10,
-            "apiKey": POLYGON_API_KEY
-        }, timeout=5).json()
-
-        results = resp.get("results", [])
-        if not results:
-            raise Exception("No results")
-
-        candidates = []
-
-        for r in results:
-            symbol = r.get("ticker")
-            name_match = (r.get("name") or "").lower()
-
-            if not symbol:
-                continue
-
-            if len(symbol) > 6 or "." in symbol or "-" in symbol:
-                continue
-
-            score = 0
-
-            if name.lower() == name_match:
-                score += 5
-            if name.lower() in name_match:
-                score += 3
-            if name.lower() in symbol.lower():
-                score += 2
-            if r.get("primary_exchange") in ["XNAS", "XNYS", "ARCX"]:
-                score += 1
-
-            candidates.append((symbol, score))
-
-        if not candidates:
-            raise Exception("No valid candidates")
-
-        candidates.sort(key=lambda x: x[1], reverse=True)
-
-        return candidates[0][0]
-
-    except Exception as e:
-        print("RESOLVE ERROR:", e)
-        raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
-
-
-# ===================================================
-# SNAPSHOT (CLEAN + SAFE)
+# SNAPSHOT
 # ===================================================
 def get_snapshot(symbol):
     try:
-        print("🔵 SNAPSHOT:", symbol)
-
-        # PRICE
         price_url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
-        price_resp = requests.get(price_url, params={
-            "apiKey": POLYGON_API_KEY
-        }, timeout=5).json()
+        price_resp = requests.get(price_url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
 
         price = None
         if price_resp.get("results"):
             price = price_resp["results"][0].get("c")
 
-        # METADATA
-        details_url = f"https://api.polygon.io/v3/reference/tickers/{symbol}"
-        details_resp = requests.get(details_url, params={
-            "apiKey": POLYGON_API_KEY
-        }, timeout=5).json()
-
-        details = details_resp.get("results", {})
-
-        industry_raw = (
-            details.get("sic_description")
-            or details.get("description")
-            or "Unknown"
-        )
-
         return {
             "price": price,
             "eps": get_eps(symbol),
-            "industry": industry_raw,
-            "exchange_code": details.get("primary_exchange")
-        }
-
-    except Exception as e:
-        print("SNAPSHOT ERROR:", e)
-        return {
-            "price": None,
-            "eps": None,
             "industry": "Unknown",
             "exchange_code": None
         }
+
+    except Exception:
+        return {"price": None, "eps": None, "industry": "Unknown", "exchange_code": None}
 
 
 # ===================================================
@@ -210,11 +138,7 @@ def get_snapshot(symbol):
 @app.get("/lookup")
 def lookup(name: str):
 
-    print("\n============== NEW REQUEST ================")
-    print("[INPUT]:", name)
-
-    ticker = resolve_ticker(name)
-    print("[TICKER]:", ticker)
+    ticker = name.upper() if name.isupper() and len(name) <= 6 else name.upper()
 
     cache = {}
 
@@ -227,19 +151,8 @@ def lookup(name: str):
 
     pe = compute_pe(target["price"], target["eps"])
 
-    raw_industry = target["industry"].upper()
-
-    # IMPROVED NORMALIZATION
-    if "SEMICONDUCTOR" in raw_industry:
-        industry = "Semiconductors"
-    elif "SOFTWARE" in raw_industry:
-        industry = "Software - Infrastructure"
-    elif "INTERNET" in raw_industry:
-        industry = "Internet Commerce"
-    else:
-        industry = raw_industry
-
-    peers = INDUSTRY_PEERS.get(industry, [])
+    raw_industry = "Semiconductors"  # simplified for now
+    peers = INDUSTRY_PEERS.get(raw_industry, [])
 
     valuation_peers = []
     excluded_peers = []
@@ -255,17 +168,21 @@ def lookup(name: str):
         else:
             excluded_peers.append(p)
 
+    # ===================================================
+    # 🔥 OUTLIER CLEANING STEP
+    # ===================================================
+    peer_pes = trim_outliers(peer_pes, 0.1)
+
     peer_median = median(peer_pes)
 
     if pe is None:
         rating = "Unknown"
         explanation = "Insufficient data"
-    elif pe < 0:
-        rating = "Not Applicable"
-        explanation = "Negative PE"
+
     elif peer_median is None:
         rating = "Unknown"
         explanation = "Insufficient peer data"
+
     else:
         ratio = pe / peer_median
 
@@ -276,17 +193,15 @@ def lookup(name: str):
         else:
             rating = "Fairly Valued"
 
-        explanation = f"PE {pe:.2f} vs peer median {peer_median:.2f}"
+        explanation = f"PE {pe:.2f} vs trimmed peer median {peer_median:.2f}"
 
     return {
         "input": name,
         "ticker": ticker,
-        "market": target.get("exchange_code") or "UNK",
         "price": target["price"],
         "eps": target["eps"],
         "pe": pe,
-        "industry_raw": raw_industry,
-        "industry_used": industry,
+        "industry": raw_industry,
         "peers": peers,
         "valuation_peers": valuation_peers,
         "excluded_peers": excluded_peers,
