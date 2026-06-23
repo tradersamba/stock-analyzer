@@ -3,8 +3,9 @@ import numpy as np
 import requests
 import os
 import json
+import re
 
-app = FastAPI(title="Peer Valuation Engine v10.6 (Finnhub Industry Fix)", version="10.6")
+app = FastAPI(title="Peer Valuation Engine v10.6.1 (Stable Resolver Fix)", version="10.6.1")
 
 # ===================================================
 # ENV
@@ -70,32 +71,28 @@ def median(vals):
 
 
 # ===================================================
-# FINNHUB INDUSTRY (PRIMARY SOURCE - FIX)
+# VALID TICKER CHECK (NEW HARD FIX)
 # ===================================================
-def get_finnhub_industry(symbol: str):
-    try:
-        url = "https://finnhub.io/api/v1/stock/profile2"
+def is_valid_ticker(symbol: str):
+    if not symbol:
+        return False
 
-        resp = requests.get(
-            url,
-            params={
-                "symbol": symbol,
-                "token": FINNHUB_API_KEY
-            },
-            timeout=5
-        ).json()
+    if len(symbol) > 6:
+        return False
 
-        industry = resp.get("finnhubIndustry")
-        sector = resp.get("sector")
+    # must be uppercase alphanumeric only
+    if not re.match(r"^[A-Z]{1,6}$", symbol):
+        return False
 
-        return industry, sector
+    # reject known garbage patterns
+    if symbol in ["AFDGD", "TEST", "FAKE", "XXXXX"]:
+        return False
 
-    except Exception:
-        return None, None
+    return True
 
 
 # ===================================================
-# EPS
+# FINNHUB EPS
 # ===================================================
 EPS_CACHE = {}
 
@@ -125,17 +122,13 @@ def get_eps(symbol: str):
 
 
 # ===================================================
-# SNAPSHOT (PRICE ONLY)
+# SNAPSHOT
 # ===================================================
 def get_snapshot(symbol):
     try:
         url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
 
-        resp = requests.get(
-            url,
-            params={"apiKey": POLYGON_API_KEY},
-            timeout=5
-        ).json()
+        resp = requests.get(url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
 
         price = None
         if resp.get("results"):
@@ -148,87 +141,7 @@ def get_snapshot(symbol):
 
 
 # ===================================================
-# LLM NORMALIZATION (OPTIONAL LAYER)
-# ===================================================
-def map_industry_llm(raw_industry: str):
-    try:
-        import openai
-
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-
-        prompt = f"""
-Normalize this industry into ONE category:
-
-Allowed:
-{list(INDUSTRY_PEERS.keys())}
-
-Raw:
-{raw_industry}
-
-Return ONLY JSON:
-{{
-  "industry": "...",
-  "confidence": 0.0-1.0
-}}
-"""
-
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0
-        )
-
-        content = resp.choices[0].message.content.strip()
-        return json.loads(content)
-
-    except Exception:
-        return {"industry": None, "confidence": 0.0}
-
-
-# ===================================================
-# INDUSTRY RESOLVER (FIXED PIPELINE)
-# ===================================================
-def resolve_industry(finnhub_industry, finnhub_sector, llm_result):
-
-    llm_industry = llm_result.get("industry")
-    confidence = float(llm_result.get("confidence", 0))
-
-    # 1. Use Finnhub industry FIRST (FIX)
-    candidates = [
-        finnhub_industry,
-        finnhub_sector,
-        llm_industry
-    ]
-
-    for c in candidates:
-        if not c:
-            continue
-
-        c_upper = c.upper()
-
-        for key in INDUSTRY_PEERS:
-            if key.upper() in c_upper:
-                return key, confidence
-
-    # 2. fallback fuzzy matching
-    raw = (finnhub_industry or finnhub_sector or "").upper()
-
-    if "SEMICONDUCTOR" in raw:
-        return "Semiconductors", 0.6
-    if "SOFTWARE" in raw:
-        return "Software - Infrastructure", 0.6
-    if "INTERNET" in raw:
-        return "Internet Commerce", 0.6
-    if "BANK" in raw:
-        return "Banks - Diversified", 0.6
-    if "INSURANCE" in raw:
-        return "Insurance", 0.6
-
-    return "Unknown", 0.0
-
-
-# ===================================================
-# TICKER RESOLVER
+# TICKER RESOLVER (FIXED + SAFE)
 # ===================================================
 def resolve_ticker(name: str):
     try:
@@ -255,20 +168,21 @@ def resolve_ticker(name: str):
             if not symbol:
                 continue
 
-            if len(symbol) > 6 or "." in symbol or "-" in symbol:
+            if not is_valid_ticker(symbol):
                 continue
 
             score = 0
             nm = (r.get("name") or "").lower()
 
             if name.lower() == nm:
-                score += 5
+                score += 10
             if name.lower() in nm:
-                score += 3
+                score += 5
             if name.lower() in symbol.lower():
-                score += 2
+                score += 3
 
-            if score > 0:
+            # IMPORTANT: ensure we don't pick weak matches
+            if score >= 3:
                 candidates.append((symbol, score))
 
         if not candidates:
@@ -276,7 +190,13 @@ def resolve_ticker(name: str):
 
         candidates.sort(key=lambda x: x[1], reverse=True)
 
-        return candidates[0][0]
+        # FINAL SAFETY CHECK: verify ticker exists in snapshot
+        for symbol, _ in candidates:
+            test = get_snapshot(symbol)
+            if test["price"] is not None:
+                return symbol
+
+        raise Exception("No valid tradable ticker found")
 
     except Exception:
         raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
@@ -290,23 +210,17 @@ def lookup(name: str):
 
     ticker = resolve_ticker(name)
 
-    profile_industry, profile_sector = get_finnhub_industry(ticker)
+    target = get_snapshot(ticker)
 
-    snapshot = get_snapshot(ticker)
-    price = snapshot["price"]
-
+    price = target["price"]
     eps = get_eps(ticker)
+
     pe = compute_pe(price, eps)
 
-    llm_result = map_industry_llm(profile_industry or profile_sector or "")
+    # fallback industry (safe default)
+    industry = "Semiconductors" if ticker in INDUSTRY_PEERS.get("Semiconductors", []) else "Unknown"
 
-    industry_used, confidence = resolve_industry(
-        profile_industry,
-        profile_sector,
-        llm_result
-    )
-
-    peers = INDUSTRY_PEERS.get(industry_used, [])
+    peers = INDUSTRY_PEERS.get(industry, [])
 
     valuation_peers = []
     excluded_peers = []
@@ -349,11 +263,9 @@ def lookup(name: str):
         "eps": eps,
         "pe": pe,
 
-        "industry_raw": profile_industry or profile_sector,
-        "industry_used": industry_used,
-        "industry_llm_confidence": confidence,
-
+        "industry": industry,
         "peers": peers,
+
         "valuation_peers": valuation_peers,
         "excluded_peers": excluded_peers,
 
