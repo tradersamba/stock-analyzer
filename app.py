@@ -1,4 +1,3 @@
-
 from fastapi import FastAPI, HTTPException
 import numpy as np
 import requests
@@ -335,4 +334,3 @@ def lookup(name: str):
             "explanation": explanation
         }
     }
-}
