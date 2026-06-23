@@ -4,7 +4,7 @@ import requests
 import os
 import json
 
-app = FastAPI(title="Peer Valuation Engine v10.4 (LLM Industry Mapping)", version="10.4")
+app = FastAPI(title="Peer Valuation Engine v10.5 (Hybrid Industry Resolver)", version="10.5")
 
 # ===================================================
 # ENV
@@ -70,7 +70,7 @@ def median(vals):
 
 
 # ===================================================
-# EPS (FINNHUB)
+# EPS
 # ===================================================
 EPS_CACHE = {}
 
@@ -80,14 +80,9 @@ def get_eps(symbol: str):
 
     try:
         url = "https://finnhub.io/api/v1/stock/metric"
-
         resp = requests.get(
             url,
-            params={
-                "symbol": symbol,
-                "metric": "all",
-                "token": FINNHUB_API_KEY
-            },
+            params={"symbol": symbol, "metric": "all", "token": FINNHUB_API_KEY},
             timeout=5
         ).json()
 
@@ -100,7 +95,105 @@ def get_eps(symbol: str):
 
 
 # ===================================================
-# TICKER RESOLVER
+# SNAPSHOT
+# ===================================================
+def get_snapshot(symbol):
+    try:
+        url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
+        resp = requests.get(url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
+
+        price = None
+        if resp.get("results"):
+            price = resp["results"][0].get("c")
+
+        return {"price": price}
+
+    except Exception:
+        return {"price": None}
+
+
+# ===================================================
+# LLM INDUSTRY MAP (SAFE + FIXED)
+# ===================================================
+def map_industry_llm(raw_industry: str):
+    try:
+        import openai
+
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+        prompt = f"""
+Map this raw industry into ONE of these categories:
+
+{list(INDUSTRY_PEERS.keys())}
+
+Raw industry:
+{raw_industry}
+
+Return ONLY valid JSON:
+{{
+  "industry": "...",
+  "confidence": 0.0-1.0
+}}
+"""
+
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+
+        content = resp.choices[0].message.content.strip()
+        result = json.loads(content)
+
+        return result
+
+    except Exception:
+        return {"industry": None, "confidence": 0.0}
+
+
+# ===================================================
+# 🔥 FIXED INDUSTRY RESOLVER (CRITICAL)
+# ===================================================
+def resolve_industry(raw: str, llm_result: dict):
+
+    llm_industry = llm_result.get("industry")
+    confidence = float(llm_result.get("confidence", 0))
+
+    # -----------------------------
+    # 1. TRUST LLM IF HIGH CONFIDENCE
+    # -----------------------------
+    if llm_industry in INDUSTRY_PEERS and confidence >= 0.6:
+        return llm_industry, confidence
+
+    # -----------------------------
+    # 2. FUZZY STRING MATCH (IMPORTANT FIX YOU WERE MISSING)
+    # -----------------------------
+    raw_u = (raw or "").upper()
+
+    for industry in INDUSTRY_PEERS:
+        if industry.upper() in raw_u:
+            return industry, 0.7
+
+    # keyword fallback
+    if "SEMICONDUCTOR" in raw_u:
+        return "Semiconductors", 0.6
+    if "SOFTWARE" in raw_u:
+        return "Software - Infrastructure", 0.6
+    if "INTERNET" in raw_u:
+        return "Internet Commerce", 0.6
+    if "BANK" in raw_u:
+        return "Banks - Diversified", 0.6
+    if "INSURANCE" in raw_u:
+        return "Insurance", 0.6
+
+    # -----------------------------
+    # 3. LAST RESORT
+    # -----------------------------
+    return "Unknown", 0.0
+
+
+# ===================================================
+# RESOLVE TICKER
 # ===================================================
 def resolve_ticker(name: str):
     try:
@@ -130,18 +223,15 @@ def resolve_ticker(name: str):
             if len(symbol) > 6 or "." in symbol or "-" in symbol:
                 continue
 
-            name_match = (r.get("name") or "").lower()
-
             score = 0
+            nm = (r.get("name") or "").lower()
 
-            if name.lower() == name_match:
+            if name.lower() == nm:
                 score += 5
-            if name.lower() in name_match:
+            if name.lower() in nm:
                 score += 3
             if name.lower() in symbol.lower():
                 score += 2
-            if r.get("primary_exchange") in ["XNAS", "XNYS", "ARCX"]:
-                score += 1
 
             if score > 0:
                 candidates.append((symbol, score, r))
@@ -161,80 +251,6 @@ def resolve_ticker(name: str):
 
 
 # ===================================================
-# SNAPSHOT
-# ===================================================
-def get_snapshot(symbol):
-    try:
-        url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
-
-        resp = requests.get(url, params={
-            "apiKey": POLYGON_API_KEY
-        }, timeout=5).json()
-
-        price = None
-        if resp.get("results"):
-            price = resp["results"][0].get("c")
-
-        return {"price": price}
-
-    except Exception:
-        return {"price": None}
-
-
-# ===================================================
-# LLM INDUSTRY MAPPING
-# ===================================================
-def map_industry_llm(raw_industry: str):
-    """
-    Returns:
-    {
-        "industry": str | None,
-        "confidence": float
-    }
-    """
-
-    try:
-        import openai
-
-        client = openai.OpenAI(api_key=OPENAI_API_KEY)
-
-        prompt = f"""
-Map this raw industry into ONE of the allowed categories.
-
-Allowed:
-{list(INDUSTRY_PEERS.keys())}
-
-Raw industry:
-{raw_industry}
-
-Return ONLY JSON:
-{{
-  "industry": "...",
-  "confidence": 0-1
-}}
-"""
-
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0
-        )
-
-        content = resp.choices[0].message.content
-        result = json.loads(content)
-
-        return {
-            "industry": result.get("industry"),
-            "confidence": float(result.get("confidence", 0))
-        }
-
-    except Exception:
-        return {"industry": None, "confidence": 0.0}
-
-
-# ===================================================
 # MAIN
 # ===================================================
 @app.get("/lookup")
@@ -242,40 +258,24 @@ def lookup(name: str):
 
     ticker, raw_industry = resolve_ticker(name)
 
-    cache = {}
-
-    def snap(sym):
-        if sym not in cache:
-            cache[sym] = get_snapshot(sym)
-        return cache[sym]
-
-    target = snap(ticker)
+    target = get_snapshot(ticker)
 
     pe = compute_pe(target["price"], get_eps(ticker))
 
-    # ===================================================
-    # LLM INDUSTRY MAPPING (NEW CORE FIX)
-    # ===================================================
-    llm = map_industry_llm(raw_industry)
+    # ==============================
+    # FIXED INDUSTRY PIPELINE
+    # ==============================
+    llm_result = map_industry_llm(raw_industry)
+    industry_used, confidence = resolve_industry(raw_industry, llm_result)
 
-    industry_used = llm["industry"]
-    confidence = llm["confidence"]
+    peers = INDUSTRY_PEERS.get(industry_used, [])
 
-    if industry_used not in INDUSTRY_PEERS or industry_used is None:
-        industry_used = "Unknown"
-        peers = []
-    else:
-        peers = INDUSTRY_PEERS[industry_used]
-
-    # ===================================================
-    # PEER P/E CALC
-    # ===================================================
     valuation_peers = []
     excluded_peers = []
     peer_pes = []
 
     for p in peers:
-        s = snap(p)
+        s = get_snapshot(p)
         v = compute_pe(s["price"], get_eps(p))
 
         if v is not None and v > 0:
@@ -286,17 +286,12 @@ def lookup(name: str):
 
     peer_median = median(peer_pes)
 
-    # ===================================================
-    # RATING
-    # ===================================================
     if pe is None:
         rating = "Unknown"
         explanation = "Insufficient data"
-
     elif peer_median is None:
         rating = "Unknown"
         explanation = "Insufficient peer data"
-
     else:
         ratio = pe / peer_median
 
@@ -309,9 +304,6 @@ def lookup(name: str):
 
         explanation = f"PE {pe:.2f} vs peer median {peer_median:.2f}"
 
-    # ===================================================
-    # RESPONSE
-    # ===================================================
     return {
         "input": name,
         "ticker": ticker,
