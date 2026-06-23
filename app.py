@@ -4,7 +4,7 @@ import requests
 import os
 import json
 
-app = FastAPI(title="Peer Valuation Engine v10.6 (Hardened Industry Resolver)", version="10.6")
+app = FastAPI(title="Peer Valuation Engine v10.6 (Finnhub Industry Fix)", version="10.6")
 
 # ===================================================
 # ENV
@@ -20,7 +20,7 @@ if not FINNHUB_API_KEY:
     print("⚠️ WARNING: FINNHUB_API_KEY not set")
 
 if not OPENAI_API_KEY:
-    print("⚠️ WARNING: OPENAI_API_KEY not set (LLM disabled)")
+    print("⚠️ WARNING: OPENAI_API_KEY not set (LLM fallback only)")
 
 
 # ===================================================
@@ -52,6 +52,7 @@ INDUSTRY_PEERS = {
     "Internet Commerce": ["AMZN","EBAY","ETSY","DASH","SHOP","MELI","PDD","JD","BABA","W","CHWY","BKNG","EXPE","CPNG"]
 }
 
+
 # ===================================================
 # HELPERS
 # ===================================================
@@ -69,6 +70,31 @@ def median(vals):
 
 
 # ===================================================
+# FINNHUB INDUSTRY (PRIMARY SOURCE - FIX)
+# ===================================================
+def get_finnhub_industry(symbol: str):
+    try:
+        url = "https://finnhub.io/api/v1/stock/profile2"
+
+        resp = requests.get(
+            url,
+            params={
+                "symbol": symbol,
+                "token": FINNHUB_API_KEY
+            },
+            timeout=5
+        ).json()
+
+        industry = resp.get("finnhubIndustry")
+        sector = resp.get("sector")
+
+        return industry, sector
+
+    except Exception:
+        return None, None
+
+
+# ===================================================
 # EPS
 # ===================================================
 EPS_CACHE = {}
@@ -79,9 +105,14 @@ def get_eps(symbol: str):
 
     try:
         url = "https://finnhub.io/api/v1/stock/metric"
+
         resp = requests.get(
             url,
-            params={"symbol": symbol, "metric": "all", "token": FINNHUB_API_KEY},
+            params={
+                "symbol": symbol,
+                "metric": "all",
+                "token": FINNHUB_API_KEY
+            },
             timeout=5
         ).json()
 
@@ -99,7 +130,12 @@ def get_eps(symbol: str):
 def get_snapshot(symbol):
     try:
         url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
-        resp = requests.get(url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
+
+        resp = requests.get(
+            url,
+            params={"apiKey": POLYGON_API_KEY},
+            timeout=5
+        ).json()
 
         price = None
         if resp.get("results"):
@@ -112,7 +148,7 @@ def get_snapshot(symbol):
 
 
 # ===================================================
-# LLM INDUSTRY MAP (HARDENED)
+# LLM NORMALIZATION (OPTIONAL LAYER)
 # ===================================================
 def map_industry_llm(raw_industry: str):
     try:
@@ -121,12 +157,12 @@ def map_industry_llm(raw_industry: str):
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
         prompt = f"""
-Map this industry into ONE of the valid categories.
+Normalize this industry into ONE category:
 
-VALID CATEGORIES:
+Allowed:
 {list(INDUSTRY_PEERS.keys())}
 
-RAW INDUSTRY:
+Raw:
 {raw_industry}
 
 Return ONLY JSON:
@@ -143,65 +179,61 @@ Return ONLY JSON:
         )
 
         content = resp.choices[0].message.content.strip()
-        result = json.loads(content)
-
-        return result
+        return json.loads(content)
 
     except Exception:
         return {"industry": None, "confidence": 0.0}
 
 
 # ===================================================
-# INDUSTRY RESOLVER (FIXED)
+# INDUSTRY RESOLVER (FIXED PIPELINE)
 # ===================================================
-def resolve_industry(raw: str, llm: dict):
+def resolve_industry(finnhub_industry, finnhub_sector, llm_result):
 
-    llm_industry = llm.get("industry")
-    confidence = float(llm.get("confidence", 0))
+    llm_industry = llm_result.get("industry")
+    confidence = float(llm_result.get("confidence", 0))
 
-    # normalize LLM string
-    if isinstance(llm_industry, str):
-        llm_industry = llm_industry.strip()
+    # 1. Use Finnhub industry FIRST (FIX)
+    candidates = [
+        finnhub_industry,
+        finnhub_sector,
+        llm_industry
+    ]
 
-    # 1. strict match first
-    if llm_industry in INDUSTRY_PEERS and confidence >= 0.6:
-        return llm_industry, confidence
+    for c in candidates:
+        if not c:
+            continue
 
-    # 2. fuzzy LLM match (case-insensitive)
-    if llm_industry:
-        for k in INDUSTRY_PEERS:
-            if k.lower() == llm_industry.lower():
-                return k, confidence
+        c_upper = c.upper()
 
-    # 3. raw string fallback matching
-    raw_u = (raw or "").upper()
+        for key in INDUSTRY_PEERS:
+            if key.upper() in c_upper:
+                return key, confidence
 
-    for k in INDUSTRY_PEERS:
-        if k.upper() in raw_u:
-            return k, 0.7
+    # 2. fallback fuzzy matching
+    raw = (finnhub_industry or finnhub_sector or "").upper()
 
-    # keyword fallback
-    if "SEMICONDUCTOR" in raw_u:
+    if "SEMICONDUCTOR" in raw:
         return "Semiconductors", 0.6
-    if "SOFTWARE" in raw_u:
+    if "SOFTWARE" in raw:
         return "Software - Infrastructure", 0.6
-    if "INTERNET" in raw_u:
+    if "INTERNET" in raw:
         return "Internet Commerce", 0.6
-    if "BANK" in raw_u:
+    if "BANK" in raw:
         return "Banks - Diversified", 0.6
-    if "INSURANCE" in raw_u:
+    if "INSURANCE" in raw:
         return "Insurance", 0.6
 
     return "Unknown", 0.0
 
 
 # ===================================================
-# RESOLVE TICKER (ENHANCED INDUSTRY SIGNAL)
+# TICKER RESOLVER
 # ===================================================
 def resolve_ticker(name: str):
     try:
         if name.isupper() and len(name) <= 6:
-            return name, "Unknown"
+            return name
 
         url = "https://api.polygon.io/v3/reference/tickers"
 
@@ -236,24 +268,15 @@ def resolve_ticker(name: str):
             if name.lower() in symbol.lower():
                 score += 2
 
-            if r.get("primary_exchange") in ["XNAS", "XNYS", "ARCX"]:
-                score += 1
-
             if score > 0:
-                industry = (
-                    r.get("sic_description")
-                    or r.get("description")
-                    or "Unknown"
-                )
-                candidates.append((symbol, score, industry))
+                candidates.append((symbol, score))
 
         if not candidates:
             raise Exception("No valid candidates")
 
         candidates.sort(key=lambda x: x[1], reverse=True)
 
-        best = candidates[0]
-        return best[0], best[2]
+        return candidates[0][0]
 
     except Exception:
         raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
@@ -265,14 +288,23 @@ def resolve_ticker(name: str):
 @app.get("/lookup")
 def lookup(name: str):
 
-    ticker, raw_industry = resolve_ticker(name)
+    ticker = resolve_ticker(name)
 
-    target = get_snapshot(ticker)
-    pe = compute_pe(target["price"], get_eps(ticker))
+    profile_industry, profile_sector = get_finnhub_industry(ticker)
 
-    # LLM industry mapping
-    llm = map_industry_llm(raw_industry)
-    industry_used, confidence = resolve_industry(raw_industry, llm)
+    snapshot = get_snapshot(ticker)
+    price = snapshot["price"]
+
+    eps = get_eps(ticker)
+    pe = compute_pe(price, eps)
+
+    llm_result = map_industry_llm(profile_industry or profile_sector or "")
+
+    industry_used, confidence = resolve_industry(
+        profile_industry,
+        profile_sector,
+        llm_result
+    )
 
     peers = INDUSTRY_PEERS.get(industry_used, [])
 
@@ -313,11 +345,11 @@ def lookup(name: str):
     return {
         "input": name,
         "ticker": ticker,
-        "price": target["price"],
-        "eps": get_eps(ticker),
+        "price": price,
+        "eps": eps,
         "pe": pe,
 
-        "industry_raw": raw_industry,
+        "industry_raw": profile_industry or profile_sector,
         "industry_used": industry_used,
         "industry_llm_confidence": confidence,
 
