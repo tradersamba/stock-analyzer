@@ -4,7 +4,7 @@ import requests
 import os
 import json
 
-app = FastAPI(title="Peer Valuation Engine v10.5 (Hybrid Industry Resolver)", version="10.5")
+app = FastAPI(title="Peer Valuation Engine v10.6 (Hardened Industry Resolver)", version="10.6")
 
 # ===================================================
 # ENV
@@ -20,7 +20,7 @@ if not FINNHUB_API_KEY:
     print("⚠️ WARNING: FINNHUB_API_KEY not set")
 
 if not OPENAI_API_KEY:
-    print("⚠️ WARNING: OPENAI_API_KEY not set (LLM mapping disabled)")
+    print("⚠️ WARNING: OPENAI_API_KEY not set (LLM disabled)")
 
 
 # ===================================================
@@ -51,7 +51,6 @@ INDUSTRY_PEERS = {
     "Internet Platforms": ["GOOGL","META","AMZN","RDDT","SNAP","BIDU"],
     "Internet Commerce": ["AMZN","EBAY","ETSY","DASH","SHOP","MELI","PDD","JD","BABA","W","CHWY","BKNG","EXPE","CPNG"]
 }
-
 
 # ===================================================
 # HELPERS
@@ -95,7 +94,7 @@ def get_eps(symbol: str):
 
 
 # ===================================================
-# SNAPSHOT
+# SNAPSHOT (PRICE ONLY)
 # ===================================================
 def get_snapshot(symbol):
     try:
@@ -113,7 +112,7 @@ def get_snapshot(symbol):
 
 
 # ===================================================
-# LLM INDUSTRY MAP (SAFE + FIXED)
+# LLM INDUSTRY MAP (HARDENED)
 # ===================================================
 def map_industry_llm(raw_industry: str):
     try:
@@ -122,14 +121,15 @@ def map_industry_llm(raw_industry: str):
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
         prompt = f"""
-Map this raw industry into ONE of these categories:
+Map this industry into ONE of the valid categories.
 
+VALID CATEGORIES:
 {list(INDUSTRY_PEERS.keys())}
 
-Raw industry:
+RAW INDUSTRY:
 {raw_industry}
 
-Return ONLY valid JSON:
+Return ONLY JSON:
 {{
   "industry": "...",
   "confidence": 0.0-1.0
@@ -152,27 +152,33 @@ Return ONLY valid JSON:
 
 
 # ===================================================
-# 🔥 FIXED INDUSTRY RESOLVER (CRITICAL)
+# INDUSTRY RESOLVER (FIXED)
 # ===================================================
-def resolve_industry(raw: str, llm_result: dict):
+def resolve_industry(raw: str, llm: dict):
 
-    llm_industry = llm_result.get("industry")
-    confidence = float(llm_result.get("confidence", 0))
+    llm_industry = llm.get("industry")
+    confidence = float(llm.get("confidence", 0))
 
-    # -----------------------------
-    # 1. TRUST LLM IF HIGH CONFIDENCE
-    # -----------------------------
+    # normalize LLM string
+    if isinstance(llm_industry, str):
+        llm_industry = llm_industry.strip()
+
+    # 1. strict match first
     if llm_industry in INDUSTRY_PEERS and confidence >= 0.6:
         return llm_industry, confidence
 
-    # -----------------------------
-    # 2. FUZZY STRING MATCH (IMPORTANT FIX YOU WERE MISSING)
-    # -----------------------------
+    # 2. fuzzy LLM match (case-insensitive)
+    if llm_industry:
+        for k in INDUSTRY_PEERS:
+            if k.lower() == llm_industry.lower():
+                return k, confidence
+
+    # 3. raw string fallback matching
     raw_u = (raw or "").upper()
 
-    for industry in INDUSTRY_PEERS:
-        if industry.upper() in raw_u:
-            return industry, 0.7
+    for k in INDUSTRY_PEERS:
+        if k.upper() in raw_u:
+            return k, 0.7
 
     # keyword fallback
     if "SEMICONDUCTOR" in raw_u:
@@ -186,14 +192,11 @@ def resolve_industry(raw: str, llm_result: dict):
     if "INSURANCE" in raw_u:
         return "Insurance", 0.6
 
-    # -----------------------------
-    # 3. LAST RESORT
-    # -----------------------------
     return "Unknown", 0.0
 
 
 # ===================================================
-# RESOLVE TICKER
+# RESOLVE TICKER (ENHANCED INDUSTRY SIGNAL)
 # ===================================================
 def resolve_ticker(name: str):
     try:
@@ -233,8 +236,16 @@ def resolve_ticker(name: str):
             if name.lower() in symbol.lower():
                 score += 2
 
+            if r.get("primary_exchange") in ["XNAS", "XNYS", "ARCX"]:
+                score += 1
+
             if score > 0:
-                candidates.append((symbol, score, r))
+                industry = (
+                    r.get("sic_description")
+                    or r.get("description")
+                    or "Unknown"
+                )
+                candidates.append((symbol, score, industry))
 
         if not candidates:
             raise Exception("No valid candidates")
@@ -242,9 +253,7 @@ def resolve_ticker(name: str):
         candidates.sort(key=lambda x: x[1], reverse=True)
 
         best = candidates[0]
-        industry = best[2].get("sic_description") or "Unknown"
-
-        return best[0], industry
+        return best[0], best[2]
 
     except Exception:
         raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
@@ -259,14 +268,11 @@ def lookup(name: str):
     ticker, raw_industry = resolve_ticker(name)
 
     target = get_snapshot(ticker)
-
     pe = compute_pe(target["price"], get_eps(ticker))
 
-    # ==============================
-    # FIXED INDUSTRY PIPELINE
-    # ==============================
-    llm_result = map_industry_llm(raw_industry)
-    industry_used, confidence = resolve_industry(raw_industry, llm_result)
+    # LLM industry mapping
+    llm = map_industry_llm(raw_industry)
+    industry_used, confidence = resolve_industry(raw_industry, llm)
 
     peers = INDUSTRY_PEERS.get(industry_used, [])
 
