@@ -3,18 +3,23 @@ import numpy as np
 import requests
 import os
 
-app = FastAPI(title="Peer Valuation Engine v10 (Polygon Fundamentals)", version="10.0")
+app = FastAPI(title="Peer Valuation Engine v10.1 (Stable)", version="10.1")
 
 # ===================================================
 # ENV
 # ===================================================
 POLYGON_API_KEY = os.getenv("POLYGON_API_KEY")
+FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
 if not POLYGON_API_KEY:
-    raise Exception("POLYGON_API_KEY not set in environment variables")
+    raise Exception("POLYGON_API_KEY not set")
+
+if not FINNHUB_API_KEY:
+    print("⚠️ WARNING: FINNHUB_API_KEY not set (EPS will fail)")
+
 
 # ===================================================
-# MARKET MAPPING
+# MARKET MAP
 # ===================================================
 MARKET_MAP = {
     "NMS": ("NSDQ", "Nasdaq"),
@@ -63,72 +68,54 @@ def compute_pe(price, eps):
 
 
 def median(vals):
-    vals = [v for v in vals if v is not None]
-    if len(vals) < 3:
+    vals = [v for v in vals if v is not None and v > 0]
+    if len(vals) < 2:
         return None
     return float(np.median(np.array(vals)))
 
+
 # ===================================================
-# EPS (POLYGON FUNDAMENTALS)
+# EPS (FIXED FINNHUB)
 # ===================================================
-def get_eps(symbol):
+def get_eps(symbol: str):
     try:
-        url = f"https://api.polygon.io/vX/reference/financials"
+        url = "https://finnhub.io/api/v1/stock/metric"
 
-        params = {
-            "ticker": symbol,
-            "timeframe": "ttm",
-            "limit": 1,
-            "apiKey": POLYGON_API_KEY
-        }
+        resp = requests.get(
+            url,
+            params={
+                "symbol": symbol,
+                "metric": "all",
+                "token": FINNHUB_API_KEY
+            },
+            timeout=5
+        ).json()
 
-        resp = requests.get(url, params=params, timeout=5)
-
-        if resp.status_code != 200:
-            return None
-
-        results = resp.json().get("results", [])
-        if not results:
-            return None
-
-        fin = results[0].get("financials", {})
-
-        income = fin.get("income_statement", {})
-        balance = fin.get("balance_sheet", {})
-
-        net_income = income.get("net_income")
-        shares = balance.get("basic_average_shares")
-
-        if net_income is None or shares is None or shares == 0:
-            return None
-
-        return net_income / shares
+        return resp.get("metric", {}).get("epsTTM")
 
     except Exception as e:
-        print("EPS ERROR:", str(e))
+        print("FINNHUB EPS ERROR:", e)
         return None
 
+
 # ===================================================
-# RESOLVE TICKER
+# TICKER RESOLVER
 # ===================================================
 def resolve_ticker(name: str):
     try:
-        # If already a ticker
         if name.isupper() and len(name) <= 6:
             return name
 
         url = "https://api.polygon.io/v3/reference/tickers"
 
-        params = {
+        resp = requests.get(url, params={
             "search": name,
             "active": "true",
             "limit": 10,
             "apiKey": POLYGON_API_KEY
-        }
+        }, timeout=5).json()
 
-        resp = requests.get(url, params=params, timeout=5).json()
         results = resp.get("results", [])
-
         if not results:
             raise Exception("No results")
 
@@ -141,24 +128,17 @@ def resolve_ticker(name: str):
             if not symbol:
                 continue
 
-            # filter junk tickers
             if len(symbol) > 6 or "." in symbol or "-" in symbol:
                 continue
 
             score = 0
 
-            # strong match on company name
             if name.lower() == name_match:
                 score += 5
-
             if name.lower() in name_match:
                 score += 3
-
-            # ticker similarity
             if name.lower() in symbol.lower():
                 score += 2
-
-            # prefer US listings
             if r.get("primary_exchange") in ["XNAS", "XNYS", "ARCX"]:
                 score += 1
 
@@ -169,43 +149,39 @@ def resolve_ticker(name: str):
 
         candidates.sort(key=lambda x: x[1], reverse=True)
 
-        best = candidates[0][0]
-
-        print("🧠 RESOLVED:", name, "→", best)
-
-        return best
+        return candidates[0][0]
 
     except Exception as e:
-        print("RESOLVE ERROR:", str(e))
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot resolve '{name}'"
-        )
+        print("RESOLVE ERROR:", e)
+        raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
+
 
 # ===================================================
-# SNAPSHOT
+# SNAPSHOT (CLEAN + SAFE)
 # ===================================================
 def get_snapshot(symbol):
     try:
-        print("🔵 POLYGON SNAPSHOT:", symbol)
+        print("🔵 SNAPSHOT:", symbol)
 
+        # PRICE
         price_url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
-        price_resp = requests.get(price_url, params={"apiKey": POLYGON_API_KEY}, timeout=5)
-
-        price_json = price_resp.json() if price_resp.status_code == 200 else {}
+        price_resp = requests.get(price_url, params={
+            "apiKey": POLYGON_API_KEY
+        }, timeout=5).json()
 
         price = None
-        if price_json.get("results"):
-            price = price_json["results"][0].get("c")
+        if price_resp.get("results"):
+            price = price_resp["results"][0].get("c")
 
+        # METADATA
         details_url = f"https://api.polygon.io/v3/reference/tickers/{symbol}"
-        details_resp = requests.get(details_url, params={"apiKey": POLYGON_API_KEY}, timeout=5)
+        details_resp = requests.get(details_url, params={
+            "apiKey": POLYGON_API_KEY
+        }, timeout=5).json()
 
-        details_json = details_resp.json() if details_resp.status_code == 200 else {}
+        details = details_resp.get("results", {})
 
-        details = details_json.get("results", {}) if details_json else {}
-
-        industry = (
+        industry_raw = (
             details.get("sic_description")
             or details.get("description")
             or "Unknown"
@@ -214,27 +190,22 @@ def get_snapshot(symbol):
         return {
             "price": price,
             "eps": get_eps(symbol),
-            "industry": industry,
-            "sector": None,
-            "exchange_code": details.get("primary_exchange"),
-            "market_code": None,
-            "market_name": None
+            "industry": industry_raw,
+            "exchange_code": details.get("primary_exchange")
         }
 
     except Exception as e:
-        print("SNAPSHOT ERROR:", str(e))
+        print("SNAPSHOT ERROR:", e)
         return {
             "price": None,
             "eps": None,
             "industry": "Unknown",
-            "sector": None,
-            "exchange_code": None,
-            "market_code": None,
-            "market_name": None
+            "exchange_code": None
         }
 
+
 # ===================================================
-# MAIN ENDPOINT
+# MAIN
 # ===================================================
 @app.get("/lookup")
 def lookup(name: str):
@@ -256,19 +227,18 @@ def lookup(name: str):
 
     pe = compute_pe(target["price"], target["eps"])
 
-    raw_industry = target["industry"]
+    raw_industry = target["industry"].upper()
 
-    YAHOO_MAP = {
-        "Internet Content & Information": "Communication Services",
-        "Online Media": "Communication Services",
-        "Social Media": "Communication Services",
-        "Internet Retail": "Internet Commerce",
-        "Internet & Direct Marketing Retail": "Internet Commerce",
-        "Computer Hardware": "Consumer Electronics",
-        "Information Technology Services": "Information Technology Services"
-    }
+    # IMPROVED NORMALIZATION
+    if "SEMICONDUCTOR" in raw_industry:
+        industry = "Semiconductors"
+    elif "SOFTWARE" in raw_industry:
+        industry = "Software - Infrastructure"
+    elif "INTERNET" in raw_industry:
+        industry = "Internet Commerce"
+    else:
+        industry = raw_industry
 
-    industry = YAHOO_MAP.get(raw_industry, raw_industry)
     peers = INDUSTRY_PEERS.get(industry, [])
 
     valuation_peers = []
@@ -290,15 +260,12 @@ def lookup(name: str):
     if pe is None:
         rating = "Unknown"
         explanation = "Insufficient data"
-
     elif pe < 0:
         rating = "Not Applicable"
         explanation = "Negative PE"
-
     elif peer_median is None:
         rating = "Unknown"
         explanation = "Insufficient peer data"
-
     else:
         ratio = pe / peer_median
 
