@@ -113,10 +113,12 @@ def get_eps(symbol):
 # ===================================================
 def resolve_ticker(name: str):
     try:
+        # If already a ticker
         if name.isupper() and len(name) <= 6:
             return name
 
         url = "https://api.polygon.io/v3/reference/tickers"
+
         params = {
             "search": name,
             "active": "true",
@@ -124,12 +126,8 @@ def resolve_ticker(name: str):
             "apiKey": POLYGON_API_KEY
         }
 
-        resp = requests.get(url, params=params, timeout=5)
-
-        if resp.status_code != 200:
-            raise Exception("Polygon API error")
-
-        results = resp.json().get("results", [])
+        resp = requests.get(url, params=params, timeout=5).json()
+        results = resp.get("results", [])
 
         if not results:
             raise Exception("No results")
@@ -138,19 +136,31 @@ def resolve_ticker(name: str):
 
         for r in results:
             symbol = r.get("ticker")
+            name_match = (r.get("name") or "").lower()
+
             if not symbol:
                 continue
 
+            # filter junk tickers
             if len(symbol) > 6 or "." in symbol or "-" in symbol:
                 continue
 
             score = 0
 
-            if name.lower() in (r.get("name") or "").lower():
+            # strong match on company name
+            if name.lower() == name_match:
+                score += 5
+
+            if name.lower() in name_match:
                 score += 3
 
+            # ticker similarity
             if name.lower() in symbol.lower():
                 score += 2
+
+            # prefer US listings
+            if r.get("primary_exchange") in ["XNAS", "XNYS", "ARCX"]:
+                score += 1
 
             candidates.append((symbol, score))
 
@@ -158,11 +168,19 @@ def resolve_ticker(name: str):
             raise Exception("No valid candidates")
 
         candidates.sort(key=lambda x: x[1], reverse=True)
-        return candidates[0][0]
+
+        best = candidates[0][0]
+
+        print("🧠 RESOLVED:", name, "→", best)
+
+        return best
 
     except Exception as e:
         print("RESOLVE ERROR:", str(e))
-        raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot resolve '{name}'"
+        )
 
 # ===================================================
 # SNAPSHOT
