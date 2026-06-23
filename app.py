@@ -3,7 +3,7 @@ import numpy as np
 import requests
 import os
 
-app = FastAPI(title="Peer Valuation Engine v10.2 (Robust PE)", version="10.2")
+app = FastAPI(title="Peer Valuation Engine v10.2 (Hardened Resolver)", version="10.2")
 
 # ===================================================
 # ENV
@@ -65,24 +65,40 @@ def median(vals):
 
 
 # ===================================================
-# 🔥 NEW: OUTLIER FILTER (TRIMMED MEDIAN)
+# VALIDATION
 # ===================================================
-def trim_outliers(values, trim_ratio=0.1):
-    """
-    Removes top and bottom X% of PE values.
-    Default = 10% trim.
-    """
-    if len(values) < 5:
-        return values
+def is_valid_ticker(symbol: str):
+    if not symbol:
+        return False
+    if len(symbol) > 6:
+        return False
+    if symbol.lower() == symbol:
+        return False
+    if " " in symbol:
+        return False
+    return True
 
-    values = sorted(values)
 
-    trim_count = int(len(values) * trim_ratio)
+# ===================================================
+# SNAPSHOT (used for validation)
+# ===================================================
+def get_snapshot(symbol):
+    try:
+        price_url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
+        resp = requests.get(price_url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
 
-    if trim_count == 0:
-        return values
+        price = None
+        if resp.get("results"):
+            price = resp["results"][0].get("c")
 
-    return values[trim_count: len(values) - trim_count]
+        return {
+            "price": price,
+            "eps": None,
+            "industry": "Unknown"
+        }
+
+    except Exception:
+        return {"price": None, "eps": None, "industry": "Unknown"}
 
 
 # ===================================================
@@ -104,32 +120,80 @@ def get_eps(symbol: str):
 
         return resp.get("metric", {}).get("epsTTM")
 
-    except Exception as e:
-        print("EPS ERROR:", e)
+    except Exception:
         return None
 
 
 # ===================================================
-# SNAPSHOT
+# RESOLVER (HARDENED)
 # ===================================================
-def get_snapshot(symbol):
+def resolve_ticker(name: str):
     try:
-        price_url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
-        price_resp = requests.get(price_url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
+        # direct ticker input
+        if name.isupper() and len(name) <= 6:
+            return name
 
-        price = None
-        if price_resp.get("results"):
-            price = price_resp["results"][0].get("c")
+        url = "https://api.polygon.io/v3/reference/tickers"
 
-        return {
-            "price": price,
-            "eps": get_eps(symbol),
-            "industry": "Unknown",
-            "exchange_code": None
-        }
+        resp = requests.get(url, params={
+            "search": name,
+            "active": "true",
+            "limit": 10,
+            "apiKey": POLYGON_API_KEY
+        }, timeout=5).json()
 
-    except Exception:
-        return {"price": None, "eps": None, "industry": "Unknown", "exchange_code": None}
+        results = resp.get("results", [])
+        if not results:
+            raise Exception("No results")
+
+        candidates = []
+
+        for r in results:
+            symbol = r.get("ticker")
+            name_match = (r.get("name") or "").lower()
+
+            if not symbol:
+                continue
+
+            if len(symbol) > 6 or "." in symbol or "-" in symbol:
+                continue
+
+            score = 0
+
+            if name.lower() == name_match:
+                score += 5
+            if name.lower() in name_match:
+                score += 3
+            if name.lower() in symbol.lower():
+                score += 2
+            if r.get("primary_exchange") in ["XNAS", "XNYS", "ARCX"]:
+                score += 1
+
+            candidates.append((symbol, score))
+
+        if not candidates:
+            raise Exception("No valid candidates")
+
+        candidates.sort(key=lambda x: x[1], reverse=True)
+
+        # ===================================================
+        # 🔥 CRITICAL FIX: validate via snapshot
+        # ===================================================
+        for symbol, _ in candidates:
+            if not is_valid_ticker(symbol):
+                continue
+
+            test = get_snapshot(symbol)
+
+            if test["price"] is not None:
+                print("🧠 RESOLVED & VALIDATED:", name, "→", symbol)
+                return symbol
+
+        raise Exception("No valid tradable ticker found")
+
+    except Exception as e:
+        print("RESOLVE ERROR:", e)
+        raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
 
 
 # ===================================================
@@ -138,7 +202,11 @@ def get_snapshot(symbol):
 @app.get("/lookup")
 def lookup(name: str):
 
-    ticker = name.upper() if name.isupper() and len(name) <= 6 else name.upper()
+    print("\n============== NEW REQUEST ================")
+    print("[INPUT]:", name)
+
+    ticker = resolve_ticker(name)
+    print("[TICKER]:", ticker)
 
     cache = {}
 
@@ -151,7 +219,7 @@ def lookup(name: str):
 
     pe = compute_pe(target["price"], target["eps"])
 
-    raw_industry = "Semiconductors"  # simplified for now
+    raw_industry = "Semiconductors"
     peers = INDUSTRY_PEERS.get(raw_industry, [])
 
     valuation_peers = []
@@ -167,11 +235,6 @@ def lookup(name: str):
             peer_pes.append(v)
         else:
             excluded_peers.append(p)
-
-    # ===================================================
-    # 🔥 OUTLIER CLEANING STEP
-    # ===================================================
-    peer_pes = trim_outliers(peer_pes, 0.1)
 
     peer_median = median(peer_pes)
 
@@ -193,7 +256,7 @@ def lookup(name: str):
         else:
             rating = "Fairly Valued"
 
-        explanation = f"PE {pe:.2f} vs trimmed peer median {peer_median:.2f}"
+        explanation = f"PE {pe:.2f} vs peer median {peer_median:.2f}"
 
     return {
         "input": name,
