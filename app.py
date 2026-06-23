@@ -1,9 +1,10 @@
+
 from fastapi import FastAPI, HTTPException
 import numpy as np
 import requests
 import os
 
-app = FastAPI(title="Peer Valuation Engine v10.2 (Hardened Resolver)", version="10.2")
+app = FastAPI(title="Peer Valuation Engine v10.3 (Stable + EPS Fixed)", version="10.3")
 
 # ===================================================
 # ENV
@@ -65,49 +66,16 @@ def median(vals):
 
 
 # ===================================================
-# VALIDATION
+# EPS (FIXED + SAFE)
 # ===================================================
-def is_valid_ticker(symbol: str):
-    if not symbol:
-        return False
-    if len(symbol) > 6:
-        return False
-    if symbol.lower() == symbol:
-        return False
-    if " " in symbol:
-        return False
-    return True
+EPS_CACHE = {}
 
-
-# ===================================================
-# SNAPSHOT (used for validation)
-# ===================================================
-def get_snapshot(symbol):
-    try:
-        price_url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
-        resp = requests.get(price_url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
-
-        price = None
-        if resp.get("results"):
-            price = resp["results"][0].get("c")
-
-        return {
-            "price": price,
-            "eps": None,
-            "industry": "Unknown"
-        }
-
-    except Exception:
-        return {"price": None, "eps": None, "industry": "Unknown"}
-
-
-# ===================================================
-# EPS (FINNHUB)
-# ===================================================
 def get_eps(symbol: str):
+    if symbol in EPS_CACHE:
+        return EPS_CACHE[symbol]
+
     try:
         url = "https://finnhub.io/api/v1/stock/metric"
-
         resp = requests.get(
             url,
             params={
@@ -118,20 +86,22 @@ def get_eps(symbol: str):
             timeout=5
         ).json()
 
-        return resp.get("metric", {}).get("epsTTM")
+        eps = resp.get("metric", {}).get("epsTTM")
+
+        EPS_CACHE[symbol] = eps
+        return eps
 
     except Exception:
         return None
 
 
 # ===================================================
-# RESOLVER (HARDENED)
+# TICKER RESOLVER (CLEAN)
 # ===================================================
 def resolve_ticker(name: str):
     try:
-        # direct ticker input
         if name.isupper() and len(name) <= 6:
-            return name
+            return name, "Unknown"
 
         url = "https://api.polygon.io/v3/reference/tickers"
 
@@ -148,10 +118,10 @@ def resolve_ticker(name: str):
 
         candidates = []
 
+        best_industry = "Unknown"
+
         for r in results:
             symbol = r.get("ticker")
-            name_match = (r.get("name") or "").lower()
-
             if not symbol:
                 continue
 
@@ -159,6 +129,7 @@ def resolve_ticker(name: str):
                 continue
 
             score = 0
+            name_match = (r.get("name") or "").lower()
 
             if name.lower() == name_match:
                 score += 5
@@ -166,34 +137,48 @@ def resolve_ticker(name: str):
                 score += 3
             if name.lower() in symbol.lower():
                 score += 2
+
             if r.get("primary_exchange") in ["XNAS", "XNYS", "ARCX"]:
                 score += 1
 
-            candidates.append((symbol, score))
+            if score > 0:
+                candidates.append((symbol, score, r))
 
         if not candidates:
             raise Exception("No valid candidates")
 
         candidates.sort(key=lambda x: x[1], reverse=True)
 
-        # ===================================================
-        # 🔥 CRITICAL FIX: validate via snapshot
-        # ===================================================
-        for symbol, _ in candidates:
-            if not is_valid_ticker(symbol):
-                continue
+        best = candidates[0]
+        best_industry = best[2].get("sic_description") or "Unknown"
 
-            test = get_snapshot(symbol)
-
-            if test["price"] is not None:
-                print("🧠 RESOLVED & VALIDATED:", name, "→", symbol)
-                return symbol
-
-        raise Exception("No valid tradable ticker found")
+        return best[0], best_industry
 
     except Exception as e:
-        print("RESOLVE ERROR:", e)
         raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
+
+
+# ===================================================
+# SNAPSHOT (PRICE ONLY)
+# ===================================================
+def get_snapshot(symbol):
+    try:
+        url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
+
+        resp = requests.get(url, params={
+            "apiKey": POLYGON_API_KEY
+        }, timeout=5).json()
+
+        price = None
+        if resp.get("results"):
+            price = resp["results"][0].get("c")
+
+        return {
+            "price": price
+        }
+
+    except Exception:
+        return {"price": None}
 
 
 # ===================================================
@@ -202,11 +187,7 @@ def resolve_ticker(name: str):
 @app.get("/lookup")
 def lookup(name: str):
 
-    print("\n============== NEW REQUEST ================")
-    print("[INPUT]:", name)
-
-    ticker = resolve_ticker(name)
-    print("[TICKER]:", ticker)
+    ticker, raw_industry = resolve_ticker(name)
 
     cache = {}
 
@@ -217,10 +198,10 @@ def lookup(name: str):
 
     target = snap(ticker)
 
-    pe = compute_pe(target["price"], target["eps"])
+    pe = compute_pe(target["price"], get_eps(ticker))
 
-    raw_industry = "Semiconductors"
-    peers = INDUSTRY_PEERS.get(raw_industry, [])
+    industry = raw_industry
+    peers = INDUSTRY_PEERS.get(industry, [])
 
     valuation_peers = []
     excluded_peers = []
@@ -228,7 +209,8 @@ def lookup(name: str):
 
     for p in peers:
         s = snap(p)
-        v = compute_pe(s["price"], s["eps"])
+        eps = get_eps(p)
+        v = compute_pe(s["price"], eps)
 
         if v is not None and v > 0:
             valuation_peers.append(p)
@@ -262,9 +244,9 @@ def lookup(name: str):
         "input": name,
         "ticker": ticker,
         "price": target["price"],
-        "eps": target["eps"],
+        "eps": get_eps(ticker),
         "pe": pe,
-        "industry": raw_industry,
+        "industry": industry,
         "peers": peers,
         "valuation_peers": valuation_peers,
         "excluded_peers": excluded_peers,
