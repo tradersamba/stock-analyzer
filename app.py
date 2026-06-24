@@ -212,63 +212,73 @@ def get_snapshot(symbol):
 # TICKER RESOLVER (POLYGON ONLY)
 # ===================================================
 def resolve_ticker(name: str):
+    try:
+        # If already a ticker, validate it properly
+        if name.isupper() and 1 <= len(name) <= 6:
+            snap = get_snapshot(name)
+            if snap["price"] is not None:
+                return name
+            # if invalid, continue search anyway
 
-    # direct ticker input
-    if name.isupper() and len(name) <= 6:
-        return name
+        url = "https://api.polygon.io/v3/reference/tickers"
 
-    url = "https://api.polygon.io/v3/reference/tickers"
+        resp = requests.get(url, params={
+            "search": name,
+            "active": "true",
+            "limit": 10,
+            "apiKey": POLYGON_API_KEY
+        }, timeout=5).json()
 
-    resp = requests.get(url, params={
-        "search": name,
-        "active": "true",
-        "limit": 10,
-        "apiKey": POLYGON_API_KEY
-    }, timeout=5).json()
+        results = resp.get("results", [])
+        if not results:
+            raise HTTPException(400, "No ticker results")
 
-    results = resp.get("results", [])
-    if not results:
-        raise HTTPException(400, "No ticker found")
+        candidates = []
 
-    candidates = []
+        for r in results:
+            symbol = r.get("ticker")
+            if not symbol:
+                continue
 
-    for r in results:
-        symbol = r.get("ticker")
+            # HARD VALIDATION (critical fix)
+            if len(symbol) > 6 or not symbol.isalpha():
+                continue
 
-        if not symbol:
-            continue
+            score = 0
+            nm = (r.get("name") or "").lower()
 
-        # 🔥 HARD VALIDATION
-        if len(symbol) > 6:
-            continue
-        if "." in symbol or "-" in symbol:
-            continue
+            # Strong preference for exact match
+            if name.lower() == nm:
+                score += 10
 
-        # 🔥 CRITICAL FIX: must exist in REAL market data
-        snap = get_snapshot(symbol)
-        if snap["price"] is None:
-            continue
+            if name.lower() in nm:
+                score += 5
 
-        name_field = (r.get("name") or "").lower()
+            if name.lower() in symbol.lower():
+                score += 2
 
-        score = 0
+            # extra boost if name matches known giants
+            if symbol in ["NVDA", "INTC", "AMD", "AAPL"]:
+                score += 1
 
-        if name.lower() == name_field:
-            score += 10
-        if name.lower() in name_field:
-            score += 5
-        if name.lower() in symbol.lower():
-            score += 3
-
-        if score >= 5:
             candidates.append((symbol, score))
 
-    if not candidates:
-        raise HTTPException(400, "No valid ticker candidates")
+        if not candidates:
+            raise HTTPException(400, "No valid candidates")
 
-    candidates.sort(key=lambda x: x[1], reverse=True)
+        # sort best match first
+        candidates.sort(key=lambda x: x[1], reverse=True)
 
-    return candidates[0][0]
+        # 🔥 FINAL SAFETY CHECK (THIS IS WHAT FIXES INTEL ISSUE)
+        for symbol, _ in candidates:
+            snap = get_snapshot(symbol)
+            if snap["price"] is not None:
+                return symbol
+
+        raise HTTPException(400, "No tradable ticker found")
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
 
 # ===================================================
 # MAIN
