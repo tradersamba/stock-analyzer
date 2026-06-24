@@ -212,6 +212,8 @@ def get_snapshot(symbol):
 # TICKER RESOLVER (POLYGON ONLY)
 # ===================================================
 def resolve_ticker(name: str):
+
+    # already ticker input
     if name.isupper() and len(name) <= 6:
         return name
 
@@ -226,10 +228,47 @@ def resolve_ticker(name: str):
 
     results = resp.get("results", [])
     if not results:
-        raise HTTPException(400, "No ticker")
+        raise HTTPException(400, "No ticker found")
 
-    return results[0]["ticker"]
+    candidates = []
 
+    for r in results:
+        symbol = r.get("ticker")
+        if not symbol:
+            continue
+
+        # 🔥 HARD FILTER: reject garbage tickers early
+        if len(symbol) > 6:
+            continue
+
+        if "." in symbol or "-" in symbol:
+            continue
+
+        # 🔥 CRITICAL FIX: must be a real tradable stock
+        snapshot = get_snapshot(symbol)
+        if snapshot["price"] is None:
+            continue
+
+        name_field = (r.get("name") or "").lower()
+
+        score = 0
+
+        if name.lower() == name_field:
+            score += 10
+        if name.lower() in name_field:
+            score += 5
+        if name.lower() in symbol.lower():
+            score += 3
+
+        if score > 0:
+            candidates.append((symbol, score))
+
+    if not candidates:
+        raise HTTPException(400, "No valid ticker candidates")
+
+    candidates.sort(key=lambda x: x[1], reverse=True)
+
+    return candidates[0][0]
 
 # ===================================================
 # MAIN
