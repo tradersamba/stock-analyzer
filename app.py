@@ -213,72 +213,68 @@ def get_snapshot(symbol):
 # ===================================================
 def resolve_ticker(name: str):
     try:
-        # If already a ticker, validate it properly
-        if name.isupper() and 1 <= len(name) <= 6:
-            snap = get_snapshot(name)
-            if snap["price"] is not None:
-                return name
-            # if invalid, continue search anyway
+        import openai
 
-        url = "https://api.polygon.io/v3/reference/tickers"
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
-        resp = requests.get(url, params={
-            "search": name,
-            "active": "true",
-            "limit": 10,
-            "apiKey": POLYGON_API_KEY
-        }, timeout=5).json()
+        prompt = f"""
+You are a financial ticker resolution engine.
 
-        results = resp.get("results", [])
-        if not results:
-            raise HTTPException(400, "No ticker results")
+Convert the company name into its correct stock ticker symbol.
 
-        candidates = []
+Rules:
+- Return ONLY a valid US-listed stock ticker (NASDAQ/NYSE)
+- Do NOT guess if uncertain — return "UNKNOWN"
+- Output MUST be JSON only
 
-        for r in results:
-            symbol = r.get("ticker")
-            if not symbol:
-                continue
+Examples:
+Nvidia -> NVDA
+Intel -> INTC
+Tesla -> TSLA
+IBM -> IBM
+Apple -> AAPL
+Microsoft -> MSFT
 
-            # HARD VALIDATION (critical fix)
-            if len(symbol) > 6 or not symbol.isalpha():
-                continue
+Company name:
+{name}
 
-            score = 0
-            nm = (r.get("name") or "").lower()
+Return format:
+{{
+  "ticker": "...",
+  "confidence": 0.0-1.0
+}}
+"""
 
-            # Strong preference for exact match
-            if name.lower() == nm:
-                score += 10
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
 
-            if name.lower() in nm:
-                score += 5
+        data = json.loads(resp.choices[0].message.content.strip())
 
-            if name.lower() in symbol.lower():
-                score += 2
+        ticker = data.get("ticker", "UNKNOWN")
+        confidence = float(data.get("confidence", 0))
 
-            # extra boost if name matches known giants
-            if symbol in ["NVDA", "INTC", "AMD", "AAPL"]:
-                score += 1
+        # -------------------------
+        # HARD VALIDATION LAYER
+        # -------------------------
+        if confidence < 0.6:
+            raise Exception("Low confidence ticker")
 
-            candidates.append((symbol, score))
+        if not re.match(r"^[A-Z]{1,6}$", ticker):
+            raise Exception("Invalid ticker format")
 
-        if not candidates:
-            raise HTTPException(400, "No valid candidates")
+        if ticker == "UNKNOWN":
+            raise Exception("Unknown ticker")
 
-        # sort best match first
-        candidates.sort(key=lambda x: x[1], reverse=True)
+        return ticker
 
-        # 🔥 FINAL SAFETY CHECK (THIS IS WHAT FIXES INTEL ISSUE)
-        for symbol, _ in candidates:
-            snap = get_snapshot(symbol)
-            if snap["price"] is not None:
-                return symbol
-
-        raise HTTPException(400, "No tradable ticker found")
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Cannot resolve '{name}'")
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot resolve ticker for '{name}'"
+        )
 
 # ===================================================
 # MAIN
