@@ -218,29 +218,28 @@ def resolve_ticker(name: str):
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
         prompt = f"""
-You are a financial ticker resolution engine.
+You map company names to stock tickers.
 
-Convert the company name into its correct stock ticker symbol.
+Return ONLY JSON.
 
 Rules:
-- Return ONLY a valid US-listed stock ticker (NASDAQ/NYSE)
-- Do NOT guess if uncertain — return "UNKNOWN"
-- Output MUST be JSON only
+- Always return the correct US ticker if known
+- If unsure, still guess best-known ticker (no UNKNOWN unless truly impossible)
+- Output must be valid JSON only
 
 Examples:
-Nvidia -> NVDA
 Intel -> INTC
+Nvidia -> NVDA
 Tesla -> TSLA
 IBM -> IBM
 Apple -> AAPL
-Microsoft -> MSFT
 
-Company name:
+Company:
 {name}
 
-Return format:
+Return:
 {{
-  "ticker": "...",
+  "ticker": "XXX",
   "confidence": 0.0-1.0
 }}
 """
@@ -253,27 +252,23 @@ Return format:
 
         data = json.loads(resp.choices[0].message.content.strip())
 
-        ticker = data.get("ticker", "UNKNOWN")
-        confidence = float(data.get("confidence", 0))
+        ticker = (data.get("ticker") or "").strip().upper()
 
-        # -------------------------
-        # HARD VALIDATION LAYER
-        # -------------------------
-        if confidence < 0.6:
-            raise Exception("Low confidence ticker")
+        # -----------------------------
+        # LIGHT VALIDATION ONLY
+        # -----------------------------
+        if len(ticker) < 1 or len(ticker) > 6:
+            raise Exception("bad ticker format")
 
-        if not re.match(r"^[A-Z]{1,6}$", ticker):
-            raise Exception("Invalid ticker format")
-
-        if ticker == "UNKNOWN":
-            raise Exception("Unknown ticker")
+        if not ticker.isalpha():
+            raise Exception("invalid ticker chars")
 
         return ticker
 
-    except Exception:
+    except Exception as e:
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot resolve ticker for '{name}'"
+            detail=f"Ticker resolution failed for '{name}'"
         )
 
 # ===================================================
