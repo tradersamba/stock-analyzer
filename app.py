@@ -82,15 +82,40 @@ def clean_name(name: str):
 # ===================================================
 def get_snapshot(symbol):
     try:
+        # 1. TRY PREV
         url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
-        resp = requests.get(url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
 
-        if resp.get("results"):
-            return {"price": resp["results"][0].get("c")}
+        resp = requests.get(
+            url,
+            params={"apiKey": POLYGON_API_KEY, "adjusted": "true"},
+            timeout=5
+        ).json()
+
+        results = resp.get("results") or []
+        if results:
+            return {"price": results[0].get("c")}
+
+        # 2. FALLBACK: last 1-day range (more reliable)
+        url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/2023-01-01/2025-12-31"
+
+        resp = requests.get(
+            url,
+            params={
+                "apiKey": POLYGON_API_KEY,
+                "sort": "desc",
+                "limit": 1
+            },
+            timeout=5
+        ).json()
+
+        results = resp.get("results") or []
+        if results:
+            return {"price": results[0].get("c")}
 
         return {"price": None}
 
-    except Exception:
+    except Exception as e:
+        print(f"[SNAPSHOT ERROR] {symbol} {repr(e)}", flush=True)
         return {"price": None}
 
 
