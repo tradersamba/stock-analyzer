@@ -211,37 +211,23 @@ def get_snapshot(symbol):
 # ===================================================
 # TICKER RESOLVER (POLYGON ONLY)
 # ===================================================
-def resolve_ticker(name: str):
+def llm_resolve_ticker(name: str):
     try:
         import openai
 
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
         prompt = f"""
-You map company names to stock tickers.
+Return ONLY the correct US stock ticker.
 
-Return ONLY JSON.
-
-Rules:
-- Always return the correct US ticker if known
-- If unsure, still guess best-known ticker (no UNKNOWN unless truly impossible)
-- Output must be valid JSON only
+Company: {name}
 
 Examples:
 Intel -> INTC
 Nvidia -> NVDA
-Tesla -> TSLA
 IBM -> IBM
+Tesla -> TSLA
 Apple -> AAPL
-
-Company:
-{name}
-
-Return:
-{{
-  "ticker": "XXX",
-  "confidence": 0.0-1.0
-}}
 """
 
         resp = client.chat.completions.create(
@@ -250,26 +236,54 @@ Return:
             temperature=0
         )
 
-        data = json.loads(resp.choices[0].message.content.strip())
+        ticker = resp.choices[0].message.content.strip().upper()
 
-        ticker = (data.get("ticker") or "").strip().upper()
+        if re.match(r"^[A-Z]{1,6}$", ticker):
+            return ticker
 
-        # -----------------------------
-        # LIGHT VALIDATION ONLY
-        # -----------------------------
-        if len(ticker) < 1 or len(ticker) > 6:
-            raise Exception("bad ticker format")
+        return None
 
-        if not ticker.isalpha():
-            raise Exception("invalid ticker chars")
+    except Exception:
+        return None
 
-        return ticker
+def resolve_ticker(name: str):
 
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ticker resolution failed for '{name}'"
-        )
+    # 1. LLM guess
+    llm_ticker = llm_resolve_ticker(name)
+
+    if llm_ticker:
+        # VALIDATION GATE (THIS IS THE FIX YOU ARE MISSING)
+        snap = get_snapshot(llm_ticker)
+        if snap["price"] is not None:
+            return llm_ticker
+
+    # 2. Polygon fallback search (SAFE VERSION)
+    url = "https://api.polygon.io/v3/reference/tickers"
+
+    resp = requests.get(url, params={
+        "search": name,
+        "active": "true",
+        "limit": 10,
+        "apiKey": POLYGON_API_KEY
+    }, timeout=5).json()
+
+    results = resp.get("results", [])
+    if not results:
+        raise HTTPException(400, f"Ticker resolution failed for '{name}'")
+
+    # try candidates with validation
+    for r in results:
+        symbol = r.get("ticker")
+        if not symbol:
+            continue
+
+        snap = get_snapshot(symbol)
+        if snap["price"] is not None:
+            return symbol
+
+    raise HTTPException(400, f"Ticker resolution failed for '{name}'")
+
+
 
 # ===================================================
 # MAIN
