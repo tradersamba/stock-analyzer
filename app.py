@@ -341,14 +341,32 @@ def lookup(name: str):
 
     peer_median = median(peer_pes)
 
-    if pe is None:
-        rating = "Unknown"
-        explanation = "Insufficient data"
-    elif peer_median is None:
-        rating = "Unknown"
-        explanation = "Insufficient peer data"
+if pe is None:
+    rating = "Unknown"
+    explanation = "Insufficient data"
+
+elif eps is not None and eps < 0:
+    rating = "Not Meaningful"
+    explanation = (
+        "EPS is negative, which means the company is not currently profitable. "
+        "The P/E ratio is not a meaningful valuation metric in this case."
+    )
+
+elif peer_median is None:
+    rating = "Unknown"
+    explanation = "Insufficient peer data"
+
+else:
+    ratio = pe / peer_median
+
+    if ratio < 0.8:
+        rating = "Undervalued"
+    elif ratio > 1.2:
+        rating = "Overvalued"
     else:
-        ratio = pe / peer_median
+        rating = "Fairly Valued"
+
+    explanation = f"PE {pe:.2f} vs peer median {peer_median:.2f}"
 
         if ratio < 0.8:
             rating = "Undervalued"
