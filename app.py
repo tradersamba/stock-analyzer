@@ -310,14 +310,23 @@ def resolve_ticker(name: str):
 @app.get("/lookup")
 def lookup(name: str):
 
+    # ===================================================
+    # Resolve ticker
+    # ===================================================
     ticker = resolve_ticker(name)
 
+    # ===================================================
+    # Price snapshot
+    # ===================================================
     snap = get_snapshot(ticker)
     price = snap["price"]
 
     eps = get_eps(ticker)
     pe = compute_pe(price, eps)
 
+    # ===================================================
+    # Industry resolution
+    # ===================================================
     fin_industry, fin_sector = get_finnhub_industry(ticker)
 
     llm_result = map_industry_llm(fin_industry, fin_sector)
@@ -325,15 +334,18 @@ def lookup(name: str):
 
     peers = INDUSTRY_PEERS.get(industry_used, [])
 
-    peer_pes = []
+    # ===================================================
+    # Peer valuation
+    # ===================================================
     valuation_peers = []
     excluded_peers = []
+    peer_pes = []
 
     for p in peers:
         s = get_snapshot(p)
         v = compute_pe(s["price"], get_eps(p))
 
-        if v:
+        if v is not None and v > 0:
             valuation_peers.append(p)
             peer_pes.append(v)
         else:
@@ -341,32 +353,26 @@ def lookup(name: str):
 
     peer_median = median(peer_pes)
 
-if pe is None:
-    rating = "Unknown"
-    explanation = "Insufficient data"
+    # ===================================================
+    # Rating logic (FIXED: negative EPS handling)
+    # ===================================================
+    if pe is None:
+        rating = "Unknown"
+        explanation = "Insufficient data"
 
-elif eps is not None and eps < 0:
-    rating = "Not Meaningful"
-    explanation = (
-        "EPS is negative, which means the company is not currently profitable. "
-        "The P/E ratio is not a meaningful valuation metric in this case."
-    )
+    elif eps is not None and eps < 0:
+        rating = "Not Meaningful"
+        explanation = (
+            "EPS is negative, which means the company is not currently profitable. "
+            "The P/E ratio is not a meaningful valuation metric in this case."
+        )
 
-elif peer_median is None:
-    rating = "Unknown"
-    explanation = "Insufficient peer data"
+    elif peer_median is None:
+        rating = "Unknown"
+        explanation = "Insufficient peer data"
 
-else:
-    ratio = pe / peer_median
-
-    if ratio < 0.8:
-        rating = "Undervalued"
-    elif ratio > 1.2:
-        rating = "Overvalued"
     else:
-        rating = "Fairly Valued"
-
-    explanation = f"PE {pe:.2f} vs peer median {peer_median:.2f}"
+        ratio = pe / peer_median
 
         if ratio < 0.8:
             rating = "Undervalued"
@@ -377,20 +383,27 @@ else:
 
         explanation = f"PE {pe:.2f} vs peer median {peer_median:.2f}"
 
+    # ===================================================
+    # Response
+    # ===================================================
     return {
         "input": name,
         "ticker": ticker,
         "price": price,
         "eps": eps,
         "pe": pe,
+
         "industry_raw": fin_industry,
         "industry_sector": fin_sector,
         "industry_used": industry_used,
         "industry_llm_confidence": confidence,
+
         "peers": peers,
         "valuation_peers": valuation_peers,
         "excluded_peers": excluded_peers,
+
         "peer_median_pe": peer_median,
+
         "assessment": {
             "rating": rating,
             "explanation": explanation
