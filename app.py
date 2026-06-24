@@ -6,8 +6,8 @@ import json
 import re
 
 app = FastAPI(
-    title="Peer Valuation Engine v10.6.3 (Finnhub Industry Authority)",
-    version="10.6.3"
+    title="Peer Valuation Engine v10.6.4 (Stable Resolver)",
+    version="10.6.4"
 )
 
 # ===================================================
@@ -24,7 +24,7 @@ if not FINNHUB_API_KEY:
     print("⚠️ WARNING: FINNHUB_API_KEY not set", flush=True)
 
 if not OPENAI_API_KEY:
-    print("⚠️ WARNING: OPENAI_API_KEY not set (LLM fallback only)", flush=True)
+    print("⚠️ WARNING: OPENAI_API_KEY not set (LLM fallback disabled)", flush=True)
 
 
 # ===================================================
@@ -61,7 +61,7 @@ INDUSTRY_PEERS = {
 # HELPERS
 # ===================================================
 def compute_pe(price, eps):
-    if price is None or eps is None or eps == 0:
+    if not price or not eps or eps == 0:
         return None
     return price / eps
 
@@ -78,16 +78,12 @@ def clean_name(name: str):
 
 
 # ===================================================
-# SNAPSHOT
+# SNAPSHOT (SAFE)
 # ===================================================
 def get_snapshot(symbol):
     try:
         url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
-        resp = requests.get(
-            url,
-            params={"apiKey": POLYGON_API_KEY},
-            timeout=5
-        ).json()
+        resp = requests.get(url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
 
         if resp.get("results"):
             return {"price": resp["results"][0].get("c")}
@@ -104,24 +100,23 @@ def get_snapshot(symbol):
 def get_finnhub_industry(symbol: str):
     try:
         url = "https://finnhub.io/api/v1/stock/profile2"
-
         resp = requests.get(
             url,
             params={"symbol": symbol, "token": FINNHUB_API_KEY},
             timeout=5
         ).json()
 
-        industry = resp.get("finnhubIndustry") or "Unknown"
-        sector = resp.get("sector") or "Unknown"
-
-        return industry, sector
+        return (
+            resp.get("finnhubIndustry") or "Unknown",
+            resp.get("sector") or "Unknown"
+        )
 
     except Exception:
         return "Unknown", "Unknown"
 
 
 # ===================================================
-# LLM INDUSTRY MAP
+# LLM INDUSTRY MAP (OPTIONAL)
 # ===================================================
 def map_industry_llm(raw_industry: str, sector: str):
     try:
@@ -135,7 +130,7 @@ Map industry to ONE of:
 Industry: {raw_industry}
 Sector: {sector}
 
-Return ONLY JSON:
+Return JSON only:
 {{"industry":"...","confidence":0.0}}
 """
 
@@ -200,24 +195,25 @@ def get_eps(symbol):
 
 
 # ===================================================
-# TICKER RESOLVER (LLM + POLYGON)
+# TICKER RESOLVER (FIXED CORE LOGIC)
 # ===================================================
 def llm_resolve_ticker(name: str):
     try:
         import openai
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
-        print(f"[LLM RESOLVE ENTER] name={name}", flush=True)
+        print(f"[LLM ENTER] {name}", flush=True)
 
         prompt = f"""
 Return ONLY valid US stock ticker.
 
 Company: {name}
 
-Intel -> INTC
+Examples:
 Nvidia -> NVDA
-Tesla -> TSLA
+Intel -> INTC
 Apple -> AAPL
+Tesla -> TSLA
 IBM -> IBM
 """
 
@@ -229,45 +225,37 @@ IBM -> IBM
 
         ticker = resp.choices[0].message.content.strip().upper()
 
-        print(f"[LLM RESOLVE RAW OUTPUT] {ticker}", flush=True)
+        print(f"[LLM RAW] {ticker}", flush=True)
 
-        if re.match(r"^[A-Z]{1,6}$", ticker):
-            print(f"[LLM RESOLVE ACCEPTED FORMAT] {ticker}", flush=True)
+        if re.match(r"^[A-Z\.]{1,6}$", ticker):
             return ticker
 
-        print(f"[LLM RESOLVE REJECTED FORMAT] {ticker}", flush=True)
         return None
 
     except Exception as e:
-        print(f"[LLM RESOLVE ERROR] {repr(e)}", flush=True)
+        print(f"[LLM ERROR] {repr(e)}", flush=True)
         return None
 
 
 def resolve_ticker(name: str):
 
     name_clean = clean_name(name)
-    print(f"[DEBUG resolve_ticker] raw={name} clean={name_clean}", flush=True)
+    print(f"[RESOLVE] raw={name} clean={name_clean}", flush=True)
 
-    # 1. LLM FIRST
+    # 1. LLM attempt (optional)
     llm_ticker = llm_resolve_ticker(name_clean)
-    print(f"[DEBUG resolve_ticker] llm_ticker={llm_ticker}", flush=True)
+    print(f"[LLM RESULT] {llm_ticker}", flush=True)
 
-    # 2. VALIDATION GATE
+    # IMPORTANT FIX:
+    # DO NOT reject symbol just because price is missing
     if llm_ticker:
-        snap = get_snapshot(llm_ticker)
-        print(f"[DEBUG LLM SNAPSHOT] {llm_ticker} price={snap['price']}", flush=True)
+        print(f"[LLM ACCEPTED WITHOUT PRICE CHECK] {llm_ticker}", flush=True)
+        return llm_ticker
 
-        if snap["price"] is not None:
-            print(f"[DEBUG LLM ACCEPTED] {llm_ticker}", flush=True)
-            return llm_ticker
-
-        print(f"[DEBUG LLM REJECTED] {llm_ticker}", flush=True)
-
-    # 3. POLYGON FALLBACK
-    print("[DEBUG FALLBACK] Polygon search triggered", flush=True)
+    # 2. Polygon fallback
+    print("[FALLBACK] Polygon search", flush=True)
 
     url = "https://api.polygon.io/v3/reference/tickers"
-
     resp = requests.get(url, params={
         "search": name_clean,
         "active": "true",
@@ -276,35 +264,32 @@ def resolve_ticker(name: str):
     }, timeout=5).json()
 
     results = resp.get("results", [])
-    print(f"[DEBUG POLYGON RESULTS] count={len(results)}", flush=True)
+    print(f"[POLYGON COUNT] {len(results)}", flush=True)
 
     if not results:
         raise HTTPException(400, f"Ticker resolution failed for '{name}'")
 
+    # return FIRST valid ticker (do NOT require price validation)
     for r in results:
         symbol = r.get("ticker")
-        if not symbol:
-            continue
-
-        snap = get_snapshot(symbol)
-        print(f"[DEBUG TRY SYMBOL] {symbol} price={snap['price']}", flush=True)
-
-        if snap["price"] is not None:
-            print(f"[DEBUG POLYGON ACCEPTED] {symbol}", flush=True)
+        if symbol:
+            print(f"[POLYGON PICK] {symbol}", flush=True)
             return symbol
 
     raise HTTPException(400, f"Ticker resolution failed for '{name}'")
 
 
 # ===================================================
-# MAIN
+# MAIN API
 # ===================================================
 @app.get("/lookup")
 def lookup(name: str):
 
     ticker = resolve_ticker(name)
 
-    price = get_snapshot(ticker)["price"]
+    snap = get_snapshot(ticker)
+    price = snap["price"]
+
     eps = get_eps(ticker)
     pe = compute_pe(price, eps)
 
@@ -315,15 +300,15 @@ def lookup(name: str):
 
     peers = INDUSTRY_PEERS.get(industry_used, [])
 
+    peer_pes = []
     valuation_peers = []
     excluded_peers = []
-    peer_pes = []
 
     for p in peers:
         s = get_snapshot(p)
         v = compute_pe(s["price"], get_eps(p))
 
-        if v is not None and v > 0:
+        if v:
             valuation_peers.append(p)
             peer_pes.append(v)
         else:
@@ -339,6 +324,7 @@ def lookup(name: str):
         explanation = "Insufficient peer data"
     else:
         ratio = pe / peer_median
+
         if ratio < 0.8:
             rating = "Undervalued"
         elif ratio > 1.2:
