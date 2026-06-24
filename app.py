@@ -5,7 +5,10 @@ import os
 import json
 import re
 
-app = FastAPI(title="Peer Valuation Engine v10.6.3 (Finnhub Industry Authority)", version="10.6.3")
+app = FastAPI(
+    title="Peer Valuation Engine v10.6.3 (Finnhub Industry Authority)",
+    version="10.6.3"
+)
 
 # ===================================================
 # ENV
@@ -18,10 +21,10 @@ if not POLYGON_API_KEY:
     raise Exception("POLYGON_API_KEY not set")
 
 if not FINNHUB_API_KEY:
-    print("⚠️ WARNING: FINNHUB_API_KEY not set")
+    print("⚠️ WARNING: FINNHUB_API_KEY not set", flush=True)
 
 if not OPENAI_API_KEY:
-    print("⚠️ WARNING: OPENAI_API_KEY not set (LLM fallback only)")
+    print("⚠️ WARNING: OPENAI_API_KEY not set (LLM fallback only)", flush=True)
 
 
 # ===================================================
@@ -70,8 +73,33 @@ def median(vals):
     return float(np.median(np.array(vals)))
 
 
+def clean_name(name: str):
+    return re.sub(r"[^a-zA-Z ]", "", name).strip()
+
+
 # ===================================================
-# 🔵 FINNHUB = ONLY SOURCE OF INDUSTRY
+# SNAPSHOT
+# ===================================================
+def get_snapshot(symbol):
+    try:
+        url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
+        resp = requests.get(
+            url,
+            params={"apiKey": POLYGON_API_KEY},
+            timeout=5
+        ).json()
+
+        if resp.get("results"):
+            return {"price": resp["results"][0].get("c")}
+
+        return {"price": None}
+
+    except Exception:
+        return {"price": None}
+
+
+# ===================================================
+# FINNHUB INDUSTRY
 # ===================================================
 def get_finnhub_industry(symbol: str):
     try:
@@ -79,21 +107,12 @@ def get_finnhub_industry(symbol: str):
 
         resp = requests.get(
             url,
-            params={
-                "symbol": symbol,
-                "token": FINNHUB_API_KEY
-            },
+            params={"symbol": symbol, "token": FINNHUB_API_KEY},
             timeout=5
         ).json()
 
-        industry = resp.get("finnhubIndustry")  # IMPORTANT
-        sector = resp.get("sector")
-
-        # hard debug safety
-        if not industry:
-            industry = "Unknown"
-        if not sector:
-            sector = "Unknown"
+        industry = resp.get("finnhubIndustry") or "Unknown"
+        sector = resp.get("sector") or "Unknown"
 
         return industry, sector
 
@@ -102,27 +121,22 @@ def get_finnhub_industry(symbol: str):
 
 
 # ===================================================
-# LLM INDUSTRY NORMALIZER
+# LLM INDUSTRY MAP
 # ===================================================
 def map_industry_llm(raw_industry: str, sector: str):
     try:
         import openai
-
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
         prompt = f"""
-Map this company industry into ONE of these categories:
-
+Map industry to ONE of:
 {list(INDUSTRY_PEERS.keys())}
 
-Raw industry: {raw_industry}
+Industry: {raw_industry}
 Sector: {sector}
 
 Return ONLY JSON:
-{{
-  "industry": "...",
-  "confidence": 0.0-1.0
-}}
+{{"industry":"...","confidence":0.0}}
 """
 
         resp = client.chat.completions.create(
@@ -141,36 +155,32 @@ Return ONLY JSON:
 # INDUSTRY RESOLVER
 # ===================================================
 def resolve_industry(raw_industry, sector, llm_result):
-
     llm_industry = llm_result.get("industry")
     confidence = float(llm_result.get("confidence", 0))
 
-    # 1. Trust LLM if strong
     if llm_industry in INDUSTRY_PEERS and confidence >= 0.6:
         return llm_industry, confidence
 
-    # 2. Finnhub fallback (IMPORTANT FIX YOU NEED)
     raw = f"{raw_industry} {sector}".lower()
 
-    for industry in INDUSTRY_PEERS:
-        if industry.lower() in raw:
-            return industry, 0.7
+    for k in INDUSTRY_PEERS:
+        if k.lower() in raw:
+            return k, 0.7
 
     return "Unknown", 0.0
 
 
 # ===================================================
-# FINNHUB EPS
+# EPS
 # ===================================================
 EPS_CACHE = {}
 
-def get_eps(symbol: str):
+def get_eps(symbol):
     if symbol in EPS_CACHE:
         return EPS_CACHE[symbol]
 
     try:
         url = "https://finnhub.io/api/v1/stock/metric"
-
         resp = requests.get(
             url,
             params={
@@ -190,43 +200,25 @@ def get_eps(symbol: str):
 
 
 # ===================================================
-# SNAPSHOT (POLYGON PRICE ONLY)
-# ===================================================
-def get_snapshot(symbol):
-    try:
-        url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
-
-        resp = requests.get(url, params={"apiKey": POLYGON_API_KEY}, timeout=5).json()
-
-        price = None
-        if resp.get("results"):
-            price = resp["results"][0].get("c")
-
-        return {"price": price}
-
-    except Exception:
-        return {"price": None}
-
-
-# ===================================================
-# TICKER RESOLVER (POLYGON ONLY)
+# TICKER RESOLVER (LLM + POLYGON)
 # ===================================================
 def llm_resolve_ticker(name: str):
     try:
         import openai
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
+        print(f"[LLM RESOLVE ENTER] name={name}", flush=True)
+
         prompt = f"""
 Return ONLY valid US stock ticker.
 
 Company: {name}
 
-Examples:
 Intel -> INTC
 Nvidia -> NVDA
-IBM -> IBM
 Tesla -> TSLA
 Apple -> AAPL
+IBM -> IBM
 """
 
         resp = client.chat.completions.create(
@@ -237,56 +229,42 @@ Apple -> AAPL
 
         ticker = resp.choices[0].message.content.strip().upper()
 
-        # 🔥 DEBUG PRINT ADDED HERE
-        print(f"[LLM TICKER DEBUG] input={name} → llm_ticker={ticker}")
+        print(f"[LLM RESOLVE RAW OUTPUT] {ticker}", flush=True)
 
         if re.match(r"^[A-Z]{1,6}$", ticker):
+            print(f"[LLM RESOLVE ACCEPTED FORMAT] {ticker}", flush=True)
             return ticker
 
+        print(f"[LLM RESOLVE REJECTED FORMAT] {ticker}", flush=True)
         return None
 
-    except Exception:
+    except Exception as e:
+        print(f"[LLM RESOLVE ERROR] {repr(e)}", flush=True)
         return None
+
 
 def resolve_ticker(name: str):
 
-    # ✅ ALWAYS define clean name first
     name_clean = clean_name(name)
+    print(f"[DEBUG resolve_ticker] raw={name} clean={name_clean}", flush=True)
 
-    # 🔥 DEBUG: input sanity check
-    print(f"[DEBUG resolve_ticker] raw={name} clean={name_clean}")
-
-    # ===================================================
     # 1. LLM FIRST
-    # ===================================================
-    try:
-        llm_ticker = llm_resolve_ticker(name_clean)
+    llm_ticker = llm_resolve_ticker(name_clean)
+    print(f"[DEBUG resolve_ticker] llm_ticker={llm_ticker}", flush=True)
 
-        # 🔥 DEBUG LLM OUTPUT
-        print(f"[DEBUG resolve_ticker] llm_ticker={llm_ticker}")
-
-    except Exception as e:
-        print(f"[DEBUG LLM FAILED] {repr(e)}")
-        llm_ticker = None
-
-    # ===================================================
     # 2. VALIDATION GATE
-    # ===================================================
     if llm_ticker:
         snap = get_snapshot(llm_ticker)
-
-        print(f"[DEBUG LLM SNAPSHOT] {llm_ticker} price={snap['price']}")
+        print(f"[DEBUG LLM SNAPSHOT] {llm_ticker} price={snap['price']}", flush=True)
 
         if snap["price"] is not None:
-            print(f"[DEBUG LLM ACCEPTED] {llm_ticker}")
+            print(f"[DEBUG LLM ACCEPTED] {llm_ticker}", flush=True)
             return llm_ticker
 
-        print(f"[DEBUG LLM REJECTED] {llm_ticker}")
+        print(f"[DEBUG LLM REJECTED] {llm_ticker}", flush=True)
 
-    # ===================================================
     # 3. POLYGON FALLBACK
-    # ===================================================
-    print("[DEBUG FALLBACK] Using Polygon search")
+    print("[DEBUG FALLBACK] Polygon search triggered", flush=True)
 
     url = "https://api.polygon.io/v3/reference/tickers"
 
@@ -298,8 +276,7 @@ def resolve_ticker(name: str):
     }, timeout=5).json()
 
     results = resp.get("results", [])
-
-    print(f"[DEBUG POLYGON RESULTS] count={len(results)}")
+    print(f"[DEBUG POLYGON RESULTS] count={len(results)}", flush=True)
 
     if not results:
         raise HTTPException(400, f"Ticker resolution failed for '{name}'")
@@ -310,14 +287,13 @@ def resolve_ticker(name: str):
             continue
 
         snap = get_snapshot(symbol)
-        print(f"[DEBUG TRY SYMBOL] {symbol} price={snap['price']}")
+        print(f"[DEBUG TRY SYMBOL] {symbol} price={snap['price']}", flush=True)
 
         if snap["price"] is not None:
-            print(f"[DEBUG POLYGON ACCEPTED] {symbol}")
+            print(f"[DEBUG POLYGON ACCEPTED] {symbol}", flush=True)
             return symbol
 
     raise HTTPException(400, f"Ticker resolution failed for '{name}'")
-
 
 
 # ===================================================
@@ -328,13 +304,10 @@ def lookup(name: str):
 
     ticker = resolve_ticker(name)
 
-    target = get_snapshot(ticker)
-
-    price = target["price"]
+    price = get_snapshot(ticker)["price"]
     eps = get_eps(ticker)
     pe = compute_pe(price, eps)
 
-    # 🔵 FINNHUB INDUSTRY IS NOW SINGLE SOURCE OF TRUTH
     fin_industry, fin_sector = get_finnhub_industry(ticker)
 
     llm_result = map_industry_llm(fin_industry, fin_sector)
@@ -361,14 +334,11 @@ def lookup(name: str):
     if pe is None:
         rating = "Unknown"
         explanation = "Insufficient data"
-
     elif peer_median is None:
         rating = "Unknown"
         explanation = "Insufficient peer data"
-
     else:
         ratio = pe / peer_median
-
         if ratio < 0.8:
             rating = "Undervalued"
         elif ratio > 1.2:
@@ -384,18 +354,14 @@ def lookup(name: str):
         "price": price,
         "eps": eps,
         "pe": pe,
-
         "industry_raw": fin_industry,
         "industry_sector": fin_sector,
         "industry_used": industry_used,
         "industry_llm_confidence": confidence,
-
         "peers": peers,
         "valuation_peers": valuation_peers,
         "excluded_peers": excluded_peers,
-
         "peer_median_pe": peer_median,
-
         "assessment": {
             "rating": rating,
             "explanation": explanation
