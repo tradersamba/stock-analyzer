@@ -250,8 +250,10 @@ Apple -> AAPL
 
 def resolve_ticker(name: str):
 
-    # 1. LLM guess
-    llm_ticker = llm_resolve_ticker(name)
+    llm_ticker = llm_resolve_ticker(name_clean)
+
+    # 🔥 DEBUG: LLM OUTPUT TRACE
+    print(f"[DEBUG resolve_ticker] input={name_clean} llm_ticker={llm_ticker}")
 
     if llm_ticker:
         # VALIDATION GATE (THIS IS THE FIX YOU ARE MISSING)
