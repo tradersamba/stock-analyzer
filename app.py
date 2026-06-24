@@ -214,11 +214,10 @@ def get_snapshot(symbol):
 def llm_resolve_ticker(name: str):
     try:
         import openai
-
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
         prompt = f"""
-Return ONLY the correct US stock ticker.
+Return ONLY valid US stock ticker.
 
 Company: {name}
 
@@ -237,6 +236,9 @@ Apple -> AAPL
         )
 
         ticker = resp.choices[0].message.content.strip().upper()
+
+        # 🔥 DEBUG PRINT ADDED HERE
+        print(f"[LLM TICKER DEBUG] input={name} → llm_ticker={ticker}")
 
         if re.match(r"^[A-Z]{1,6}$", ticker):
             return ticker
