@@ -213,7 +213,7 @@ def get_snapshot(symbol):
 # ===================================================
 def resolve_ticker(name: str):
 
-    # already ticker input
+    # direct ticker input
     if name.isupper() and len(name) <= 6:
         return name
 
@@ -234,19 +234,19 @@ def resolve_ticker(name: str):
 
     for r in results:
         symbol = r.get("ticker")
+
         if not symbol:
             continue
 
-        # 🔥 HARD FILTER: reject garbage tickers early
+        # 🔥 HARD VALIDATION
         if len(symbol) > 6:
             continue
-
         if "." in symbol or "-" in symbol:
             continue
 
-        # 🔥 CRITICAL FIX: must be a real tradable stock
-        snapshot = get_snapshot(symbol)
-        if snapshot["price"] is None:
+        # 🔥 CRITICAL FIX: must exist in REAL market data
+        snap = get_snapshot(symbol)
+        if snap["price"] is None:
             continue
 
         name_field = (r.get("name") or "").lower()
@@ -260,7 +260,7 @@ def resolve_ticker(name: str):
         if name.lower() in symbol.lower():
             score += 3
 
-        if score > 0:
+        if score >= 5:
             candidates.append((symbol, score))
 
     if not candidates:
