@@ -250,39 +250,70 @@ Apple -> AAPL
 
 def resolve_ticker(name: str):
 
-    llm_ticker = llm_resolve_ticker(name_clean)
+    # ✅ ALWAYS define clean name first
+    name_clean = clean_name(name)
 
-    # 🔥 DEBUG: LLM OUTPUT TRACE
-    print(f"[DEBUG resolve_ticker] input={name_clean} llm_ticker={llm_ticker}")
+    # 🔥 DEBUG: input sanity check
+    print(f"[DEBUG resolve_ticker] raw={name} clean={name_clean}")
 
+    # ===================================================
+    # 1. LLM FIRST
+    # ===================================================
+    try:
+        llm_ticker = llm_resolve_ticker(name_clean)
+
+        # 🔥 DEBUG LLM OUTPUT
+        print(f"[DEBUG resolve_ticker] llm_ticker={llm_ticker}")
+
+    except Exception as e:
+        print(f"[DEBUG LLM FAILED] {repr(e)}")
+        llm_ticker = None
+
+    # ===================================================
+    # 2. VALIDATION GATE
+    # ===================================================
     if llm_ticker:
-        # VALIDATION GATE (THIS IS THE FIX YOU ARE MISSING)
         snap = get_snapshot(llm_ticker)
+
+        print(f"[DEBUG LLM SNAPSHOT] {llm_ticker} price={snap['price']}")
+
         if snap["price"] is not None:
+            print(f"[DEBUG LLM ACCEPTED] {llm_ticker}")
             return llm_ticker
 
-    # 2. Polygon fallback search (SAFE VERSION)
+        print(f"[DEBUG LLM REJECTED] {llm_ticker}")
+
+    # ===================================================
+    # 3. POLYGON FALLBACK
+    # ===================================================
+    print("[DEBUG FALLBACK] Using Polygon search")
+
     url = "https://api.polygon.io/v3/reference/tickers"
 
     resp = requests.get(url, params={
-        "search": name,
+        "search": name_clean,
         "active": "true",
         "limit": 10,
         "apiKey": POLYGON_API_KEY
     }, timeout=5).json()
 
     results = resp.get("results", [])
+
+    print(f"[DEBUG POLYGON RESULTS] count={len(results)}")
+
     if not results:
         raise HTTPException(400, f"Ticker resolution failed for '{name}'")
 
-    # try candidates with validation
     for r in results:
         symbol = r.get("ticker")
         if not symbol:
             continue
 
         snap = get_snapshot(symbol)
+        print(f"[DEBUG TRY SYMBOL] {symbol} price={snap['price']}")
+
         if snap["price"] is not None:
+            print(f"[DEBUG POLYGON ACCEPTED] {symbol}")
             return symbol
 
     raise HTTPException(400, f"Ticker resolution failed for '{name}'")
