@@ -126,7 +126,29 @@ def get_snapshot(symbol):
     except Exception as e:
         print(f"[SNAPSHOT ERROR] {symbol} {repr(e)}", flush=True)
         return {"price": None}
+        
+# ===================================================
+# POLYGON ACTIVE CHECK
+# ===================================================
+def ticker_is_active(symbol):
+    try:
+        url = f"https://api.polygon.io/v3/reference/tickers/{symbol}"
 
+        resp = requests.get(
+            url,
+            params={"apiKey": POLYGON_API_KEY},
+            timeout=5
+        ).json()
+
+        active = resp.get("results", {}).get("active", False)
+
+        print(f"[TICKER ACTIVE] {symbol} active={active}", flush=True)
+
+        return active
+
+    except Exception as e:
+        print(f"[TICKER ACTIVE ERROR] {repr(e)}", flush=True)
+        return True     # don't reject because Polygon hiccupped
 # ===================================================
 # FINNHUB INDUSTRY
 # ===================================================
@@ -397,6 +419,7 @@ def lookup(name: str):
     # Resolve ticker
     # ===================================================
     ticker = resolve_ticker(name)
+    ticker_active = ticker_is_active(ticker)
 
     # ===================================================
     # Price snapshot
@@ -435,6 +458,35 @@ def lookup(name: str):
             excluded_peers.append(p)
 
     peer_median = median(peer_pes)
+    if not ticker_active:
+
+    rating = "Inactive"
+
+    explanation = (
+        "This ticker appears to be inactive or delisted. "
+        "The company may have been acquired, gone private, "
+        "or no longer trades under this ticker."
+    )
+
+    return {
+        "input": name,
+        "ticker": ticker,
+        "price": price,
+        "eps": eps,
+        "pe": pe,
+        "industry_raw": fin_industry,
+        "industry_sector": fin_sector,
+        "industry_used": industry_used,
+        "industry_llm_confidence": confidence,
+        "peers": peers,
+        "valuation_peers": valuation_peers,
+        "excluded_peers": excluded_peers,
+        "peer_median_pe": peer_median,
+        "assessment": {
+            "rating": rating,
+            "explanation": explanation
+        }
+    }
 
     # ===================================================
     # Rating logic (FIXED: negative EPS handling)
