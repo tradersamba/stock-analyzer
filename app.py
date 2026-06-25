@@ -309,12 +309,19 @@ IBM -> IBM
             temperature=0
         )
 
-        ticker = resp.choices[0].message.content.strip().upper()
+        raw = resp.choices[0].message.content.strip().upper()
 
-        print(f"[LLM RAW] {ticker}", flush=True)
+        print(f"[LLM RAW] {raw}", flush=True)
 
-        if re.match(r"^[A-Z\.]{1,6}$", ticker):
-            return ticker
+        # Handles answers like: IBM -> IBM
+        if "->" in raw:
+            raw = raw.split("->")[-1].strip()
+
+        # Remove markdown/code formatting if any
+        raw = raw.replace("`", "").strip()
+
+        if re.fullmatch(r"[A-Z]{1,5}", raw):
+            return raw
 
         return None
 
