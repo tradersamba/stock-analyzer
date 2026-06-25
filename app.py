@@ -457,37 +457,37 @@ def lookup(name: str):
         else:
             excluded_peers.append(p)
 
-peer_median = median(peer_pes)
+    peer_median = median(peer_pes)
 
-if not ticker_active:
+    if not ticker_active:
 
-    rating = "Inactive"
+        rating = "Inactive"
 
-    explanation = (
-        "This ticker appears to be inactive or delisted. "
-        "The company may have been acquired, gone private, "
-        "or no longer trades under this ticker."
-    )
+        explanation = (
+            "This ticker appears to be inactive or delisted. "
+            "The company may have been acquired, gone private, "
+            "or no longer trades under this ticker."
+        )
 
-    return {
-        "input": name,
-        "ticker": ticker,
-        "price": price,
-        "eps": eps,
-        "pe": pe,
-        "industry_raw": fin_industry,
-        "industry_sector": fin_sector,
-        "industry_used": industry_used,
-        "industry_llm_confidence": confidence,
-        "peers": peers,
-        "valuation_peers": valuation_peers,
-        "excluded_peers": excluded_peers,
-        "peer_median_pe": peer_median,
-        "assessment": {
-            "rating": rating,
-            "explanation": explanation
+        return {
+            "input": name,
+            "ticker": ticker,
+            "price": price,
+            "eps": eps,
+            "pe": pe,
+            "industry_raw": fin_industry,
+            "industry_sector": fin_sector,
+            "industry_used": industry_used,
+            "industry_llm_confidence": confidence,
+            "peers": peers,
+            "valuation_peers": valuation_peers,
+            "excluded_peers": excluded_peers,
+            "peer_median_pe": peer_median,
+            "assessment": {
+                "rating": rating,
+                "explanation": explanation
+            }
         }
-    }
     # ===================================================
     # Rating logic (FIXED: negative EPS handling)
     # ===================================================
