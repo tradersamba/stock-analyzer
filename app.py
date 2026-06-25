@@ -149,6 +149,46 @@ def ticker_is_active(symbol):
     except Exception as e:
         print(f"[TICKER ACTIVE ERROR] {repr(e)}", flush=True)
         return True     # don't reject because Polygon hiccupped
+
+# ===================================================
+# STOCK EXCHANGE
+# ===================================================
+def get_exchange(symbol):
+    try:
+        url = f"https://api.polygon.io/v3/reference/tickers/{symbol}"
+
+        resp = requests.get(
+            url,
+            params={"apiKey": POLYGON_API_KEY},
+            timeout=5
+        ).json()
+
+        result = resp.get("results", {})
+
+        exchange_code = (
+            result.get("primary_exchange")
+            or result.get("market")
+            or "Unknown"
+        )
+
+        exchange_map = {
+            "XNAS": "NASDAQ",
+            "XNYS": "NYSE",
+            "ARCX": "NYSE Arca",
+            "BATS": "Cboe",
+            "OTCM": "OTC Markets"
+        }
+
+        exchange = exchange_map.get(exchange_code, exchange_code)
+
+        print(f"[EXCHANGE] {symbol} -> {exchange}", flush=True)
+
+        return exchange
+
+    except Exception as e:
+        print(f"[EXCHANGE ERROR] {symbol} {repr(e)}", flush=True)
+        return "Unknown"
+
 # ===================================================
 # FINNHUB INDUSTRY
 # ===================================================
@@ -418,9 +458,36 @@ def lookup(name: str):
     # ===================================================
     # Resolve ticker
     # ===================================================
-    ticker = resolve_ticker(name)
-    ticker_active = ticker_is_active(ticker)
+    try:
+        ticker = resolve_ticker(name)
+    except HTTPException:
+        return {
+            "input": name,
+            "ticker": None,
+            "price": None,
+            "eps": None,
+            "pe": None,
+            "industry_raw": "Unknown",
+            "industry_sector": "Unknown",
+            "industry_used": "Unknown",
+            "industry_llm_confidence": 0.0,
+            "peers": [],
+            "valuation_peers": [],
+            "excluded_peers": [],
+            "peer_median_pe": None,
+            "assessment": {
+                "rating": "Unknown",
+                "explanation": (
+                    "Company could not be found on a U.S. stock exchange. "
+                    "It may be a private company, listed only on a foreign exchange, "
+                    "or the company name may be misspelled."
+                )
+            }
+        }
 
+    ticker_active = ticker_is_active(ticker)
+    exchange = get_exchange(ticker)
+    
     # ===================================================
     # Price snapshot
     # ===================================================
@@ -472,6 +539,7 @@ def lookup(name: str):
         return {
             "input": name,
             "ticker": ticker,
+            "exchange": exchange,
             "price": price,
             "eps": eps,
             "pe": pe,
@@ -533,6 +601,7 @@ def lookup(name: str):
     return {
         "input": name,
         "ticker": ticker,
+        "exchange": exchange,
         "price": price,
         "eps": eps,
         "pe": pe,
