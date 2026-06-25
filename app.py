@@ -457,8 +457,9 @@ def lookup(name: str):
         else:
             excluded_peers.append(p)
 
-    peer_median = median(peer_pes)
-    if not ticker_active:
+peer_median = median(peer_pes)
+
+if not ticker_active:
 
     rating = "Inactive"
 
@@ -487,7 +488,6 @@ def lookup(name: str):
             "explanation": explanation
         }
     }
-
     # ===================================================
     # Rating logic (FIXED: negative EPS handling)
     # ===================================================
