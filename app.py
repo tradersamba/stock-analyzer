@@ -188,7 +188,14 @@ Return ONLY JSON:
             flush=True
         )
 
-        parsed = json.loads(raw_response)
+        cleaned = (
+            raw_response
+            .replace("```json", "")
+            .replace("```", "")
+            .strip()
+        )
+
+        parsed = json.loads(cleaned)
 
         print(
             f"[INDUSTRY LLM PARSED] {parsed}",
