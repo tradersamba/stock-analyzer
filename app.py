@@ -144,31 +144,70 @@ def get_finnhub_industry(symbol: str):
 # LLM INDUSTRY MAP (OPTIONAL)
 # ===================================================
 def map_industry_llm(raw_industry: str, sector: str):
+
+    print(
+        f"[INDUSTRY LLM INPUT] industry='{raw_industry}' sector='{sector}'",
+        flush=True
+    )
+
     try:
         import openai
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
         prompt = f"""
-Map industry to ONE of:
+Map this company into EXACTLY ONE of these industries:
+
 {list(INDUSTRY_PEERS.keys())}
 
-Industry: {raw_industry}
-Sector: {sector}
+Raw Industry:
+{raw_industry}
 
-Return JSON only:
-{{"industry":"...","confidence":0.0}}
+Sector:
+{sector}
+
+Return ONLY JSON:
+
+{{
+    "industry":"...",
+    "confidence":0.0
+}}
 """
 
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
             temperature=0
         )
 
-        return json.loads(resp.choices[0].message.content.strip())
+        raw_response = resp.choices[0].message.content.strip()
 
-    except Exception:
-        return {"industry": None, "confidence": 0.0}
+        print(
+            f"[INDUSTRY LLM RAW] {raw_response}",
+            flush=True
+        )
+
+        parsed = json.loads(raw_response)
+
+        print(
+            f"[INDUSTRY LLM PARSED] {parsed}",
+            flush=True
+        )
+
+        return parsed
+
+    except Exception as e:
+
+        print(
+            f"[INDUSTRY LLM ERROR] {repr(e)}",
+            flush=True
+        )
+
+        return {
+            "industry": None,
+            "confidence": 0.0
+        }
 
 
 # ===================================================
@@ -178,14 +217,36 @@ def resolve_industry(raw_industry, sector, llm_result):
     llm_industry = llm_result.get("industry")
     confidence = float(llm_result.get("confidence", 0))
 
+    print(
+        f"[INDUSTRY RESOLVE] "
+        f"raw='{raw_industry}' "
+        f"sector='{sector}' "
+        f"llm='{llm_industry}' "
+        f"confidence={confidence}",
+        flush=True
+    )
+
     if llm_industry in INDUSTRY_PEERS and confidence >= 0.6:
+        print(
+            f"[INDUSTRY ACCEPTED] {llm_industry}",
+            flush=True
+        )
         return llm_industry, confidence
 
     raw = f"{raw_industry} {sector}".lower()
 
     for k in INDUSTRY_PEERS:
         if k.lower() in raw:
+            print(
+                f"[INDUSTRY FALLBACK MATCH] {k}",
+                flush=True
+            )
             return k, 0.7
+
+    print(
+        "[INDUSTRY FAILED] Returning Unknown",
+        flush=True
+    )
 
     return "Unknown", 0.0
 
