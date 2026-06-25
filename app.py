@@ -78,7 +78,7 @@ def clean_name(name: str):
 
 
 # ===================================================
-# SNAPSHOT (SAFE)
+# SNAPSHOT (DEBUG)
 # ===================================================
 def get_snapshot(symbol):
     try:
@@ -91,11 +91,15 @@ def get_snapshot(symbol):
             timeout=5
         ).json()
 
+        print(f"[SNAPSHOT PREV] {symbol} -> {resp}", flush=True)
+
         results = resp.get("results") or []
         if results:
-            return {"price": results[0].get("c")}
+            price = results[0].get("c")
+            print(f"[SNAPSHOT PREV PRICE] {symbol} price={price}", flush=True)
+            return {"price": price}
 
-        # 2. FALLBACK: last 1-day range (more reliable)
+        # 2. FALLBACK: last 1-day range
         url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/2023-01-01/2025-12-31"
 
         resp = requests.get(
@@ -108,16 +112,20 @@ def get_snapshot(symbol):
             timeout=5
         ).json()
 
+        print(f"[SNAPSHOT RANGE] {symbol} -> {resp}", flush=True)
+
         results = resp.get("results") or []
         if results:
-            return {"price": results[0].get("c")}
+            price = results[0].get("c")
+            print(f"[SNAPSHOT RANGE PRICE] {symbol} price={price}", flush=True)
+            return {"price": price}
 
+        print(f"[SNAPSHOT FAILED] {symbol} no price found", flush=True)
         return {"price": None}
 
     except Exception as e:
         print(f"[SNAPSHOT ERROR] {symbol} {repr(e)}", flush=True)
         return {"price": None}
-
 
 # ===================================================
 # FINNHUB INDUSTRY
