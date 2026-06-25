@@ -431,7 +431,16 @@ def lookup(name: str):
     # ===================================================
     # Rating logic (FIXED: negative EPS handling)
     # ===================================================
-    if pe is None:
+    is_bankrupt = ticker.upper().endswith("Q")
+
+    if is_bankrupt:
+        rating = "Not Meaningful"
+        explanation = (
+            "Company is in bankruptcy or bankruptcy-related trading status. "
+            "The P/E ratio is not meaningful for this stock."
+        )
+
+    elif pe is None:
         rating = "Unknown"
         explanation = "Insufficient data"
 
