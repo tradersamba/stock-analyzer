@@ -573,8 +573,9 @@ def lookup(name: str):
     peer_pes = []
 
     for p in peers:
-        s = get_snapshot(p)
-        v = compute_pe(s["price"], get_eps(p))
+        peer_price = get_finnhub_price(p)
+        peer_eps = get_eps(p)
+        v = compute_pe(peer_price, peer_eps)
 
         if v is not None and v > 0:
             valuation_peers.append(p)
