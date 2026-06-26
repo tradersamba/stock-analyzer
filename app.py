@@ -419,6 +419,16 @@ def get_finnhub_price(symbol):
 # TICKER RESOLVER (FIXED CORE LOGIC)
 # ===================================================
 def llm_resolve_ticker(name: str):
+
+    cache_key = clean_name(name).lower()
+
+    if cache_key in TICKER_CACHE:
+        print(
+            f"[TICKER CACHE HIT] {cache_key} -> {TICKER_CACHE[cache_key]}",
+            flush=True
+        )
+        return TICKER_CACHE[cache_key]
+
     try:
         import openai
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
@@ -456,6 +466,8 @@ IBM -> IBM
         raw = raw.replace("`", "").strip()
 
         if re.fullmatch(r"[A-Z]{1,5}", raw):
+            TICKER_CACHE[cache_key] = raw
+            print(f"[TICKER CACHE SAVE] {cache_key} -> {raw}", flush=True)
             return raw
 
         return None
