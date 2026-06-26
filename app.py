@@ -81,6 +81,11 @@ def clean_name(name: str):
 # SNAPSHOT (DEBUG)
 # ===================================================
 def get_snapshot(symbol):
+
+    if symbol in SNAPSHOT_CACHE:
+        print(f"[SNAPSHOT CACHE HIT] {symbol} -> {SNAPSHOT_CACHE[symbol]}", flush=True)
+        return SNAPSHOT_CACHE[symbol]
+
     try:
         # 1. TRY PREV
         url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
@@ -97,7 +102,9 @@ def get_snapshot(symbol):
         if results:
             price = results[0].get("c")
             print(f"[SNAPSHOT PREV PRICE] {symbol} price={price}", flush=True)
-            return {"price": price}
+            SNAPSHOT_CACHE[symbol] = {"price": price}
+            print(f"[SNAPSHOT CACHE SAVE] {symbol} -> {price}", flush=True)
+            return SNAPSHOT_CACHE[symbol]
 
         # 2. FALLBACK: last 1-day range
         url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/range/1/day/2023-01-01/2025-12-31"
@@ -118,7 +125,9 @@ def get_snapshot(symbol):
         if results:
             price = results[0].get("c")
             print(f"[SNAPSHOT RANGE PRICE] {symbol} price={price}", flush=True)
-            return {"price": price}
+            SNAPSHOT_CACHE[symbol] = {"price": price}
+            print(f"[SNAPSHOT CACHE SAVE] {symbol} -> {price}", flush=True)
+            return SNAPSHOT_CACHE[symbol]
 
         print(f"[SNAPSHOT FAILED] {symbol} no price found", flush=True)
         return {"price": None}
@@ -333,6 +342,7 @@ def resolve_industry(raw_industry, sector, llm_result):
 # ===================================================
 
 EPS_CACHE = {}
+SNAPSHOT_CACHE = {}
 
 TICKER_CACHE = {}
 INDUSTRY_LLM_CACHE = {}
