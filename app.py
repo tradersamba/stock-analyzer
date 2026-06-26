@@ -224,6 +224,15 @@ def get_finnhub_industry(symbol: str):
 # ===================================================
 def map_industry_llm(raw_industry: str, sector: str):
 
+    cache_key = f"{raw_industry}|{sector}".lower()
+
+    if cache_key in INDUSTRY_LLM_CACHE:
+        print(
+            f"[INDUSTRY CACHE HIT] {cache_key} -> {INDUSTRY_LLM_CACHE[cache_key]}",
+            flush=True
+        )
+        return INDUSTRY_LLM_CACHE[cache_key]
+
     print(
         f"[INDUSTRY LLM INPUT] industry='{raw_industry}' sector='{sector}'",
         flush=True
@@ -281,8 +290,14 @@ Return ONLY JSON:
             flush=True
         )
 
-        return parsed
+        INDUSTRY_LLM_CACHE[cache_key] = parsed
 
+        print(
+            f"[INDUSTRY CACHE SAVE] {cache_key} -> {parsed}",
+            flush=True
+        )
+
+        return parsed
     except Exception as e:
 
         print(
