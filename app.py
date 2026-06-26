@@ -331,10 +331,16 @@ def resolve_industry(raw_industry, sector, llm_result):
 # ===================================================
 # EPS
 # ===================================================
+
 EPS_CACHE = {}
 
+TICKER_CACHE = {}
+INDUSTRY_LLM_CACHE = {}
+
 def get_eps(symbol):
+
     if symbol in EPS_CACHE:
+        print(f"[EPS CACHE HIT] {symbol} -> {EPS_CACHE[symbol]}", flush=True)
         return EPS_CACHE[symbol]
 
     try:
@@ -350,7 +356,11 @@ def get_eps(symbol):
         ).json()
 
         eps = resp.get("metric", {}).get("epsTTM")
+
         EPS_CACHE[symbol] = eps
+
+        print(f"[EPS CACHE SAVE] {symbol} -> {eps}", flush=True)
+
         return eps
 
     except Exception:
