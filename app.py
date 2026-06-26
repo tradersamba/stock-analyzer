@@ -612,6 +612,38 @@ def lookup(name: str):
 
     peer_median = median(peer_pes)
 
+    is_bankrupt = ticker.upper().endswith("Q")
+
+    if is_bankrupt:
+
+        rating = "Not Meaningful"
+
+        explanation = (
+            "This ticker appears to be in bankruptcy or bankruptcy-related trading status. "
+            "The P/E ratio is not meaningful for this stock."
+        )
+
+        return {
+            "input": name,
+            "ticker": ticker,
+            "exchange": exchange,
+            "price": price,
+            "eps": eps,
+            "pe": pe,
+            "industry_raw": fin_industry,
+            "industry_sector": fin_sector,
+            "industry_used": industry_used,
+            "industry_llm_confidence": confidence,
+            "peers": peers,
+            "valuation_peers": valuation_peers,
+            "excluded_peers": excluded_peers,
+            "peer_median_pe": peer_median,
+            "assessment": {
+                "rating": rating,
+                "explanation": explanation
+            }
+        }
+    
     if not ticker_active:
 
         rating = "Inactive"
@@ -645,16 +677,7 @@ def lookup(name: str):
     # ===================================================
     # Rating logic (FIXED: negative EPS handling)
     # ===================================================
-    is_bankrupt = ticker.upper().endswith("Q")
-
-    if is_bankrupt:
-        rating = "Not Meaningful"
-        explanation = (
-            "Company is in bankruptcy or bankruptcy-related trading status. "
-            "The P/E ratio is not meaningful for this stock."
-        )
-
-    elif pe is None:
+    if pe is None:
         rating = "Unknown"
         explanation = "Insufficient data"
 
