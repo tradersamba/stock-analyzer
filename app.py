@@ -342,6 +342,7 @@ def resolve_industry(raw_industry, sector, llm_result):
 # ===================================================
 
 EPS_CACHE = {}
+FINNHUB_PRICE_CACHE = {}
 SNAPSHOT_CACHE = {}
 
 TICKER_CACHE = {}
@@ -376,6 +377,43 @@ def get_eps(symbol):
     except Exception:
         return None
 
+# ===================================================
+# FINNHUB PRICE
+# ===================================================
+def get_finnhub_price(symbol):
+    if symbol in FINNHUB_PRICE_CACHE:
+        print(
+            f"[FINNHUB PRICE CACHE HIT] {symbol} -> {FINNHUB_PRICE_CACHE[symbol]}",
+            flush=True
+        )
+        return FINNHUB_PRICE_CACHE[symbol]
+
+    try:
+        url = "https://finnhub.io/api/v1/quote"
+
+        resp = requests.get(
+            url,
+            params={
+                "symbol": symbol,
+                "token": FINNHUB_API_KEY
+            },
+            timeout=5
+        ).json()
+
+        price = resp.get("c") or resp.get("pc")
+
+        FINNHUB_PRICE_CACHE[symbol] = price
+
+        print(
+            f"[FINNHUB PRICE CACHE SAVE] {symbol} -> {price}",
+            flush=True
+        )
+
+        return price
+
+    except Exception as e:
+        print(f"[FINNHUB PRICE ERROR] {symbol} {repr(e)}", flush=True)
+        return None
 
 # ===================================================
 # TICKER RESOLVER (FIXED CORE LOGIC)
