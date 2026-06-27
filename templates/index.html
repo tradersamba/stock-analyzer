@@ -1,1 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Peer Valuation Engine</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
 
+<div class="app">
+
+    <header>
+        <h1>Peer Valuation Engine</h1>
+        <p>Company valuation compared to industry peers</p>
+    </header>
+
+    <section class="search-box">
+        <input id="companyInput" type="text" placeholder="Enter company name, e.g. Apple">
+        <button onclick="analyzeStock()">Analyze</button>
+    </section>
+
+    <main class="dashboard">
+
+        <section class="left-panel">
+            <h2>Company Information</h2>
+
+            <div class="info-grid">
+                <div>Ticker</div><div id="ticker">—</div>
+                <div>Exchange</div><div id="exchange">—</div>
+                <div>Price</div><div id="price">—</div>
+                <div>EPS</div><div id="eps">—</div>
+                <div>P/E</div><div id="pe">—</div>
+                <div>Industry</div><div id="industry">—</div>
+                <div>Peer Median P/E</div><div id="peerMedian">—</div>
+                <div>Rating</div><div id="rating">—</div>
+            </div>
+        </section>
+
+        <section class="right-panel">
+            <h2>Peer Companies</h2>
+            <div id="peers" class="peer-list">—</div>
+        </section>
+
+    </main>
+
+    <section class="assessment-panel">
+        <h2>Assessment</h2>
+        <div id="assessment" class="assessment-scroll">
+            Enter a company name and click Analyze.
+        </div>
+    </section>
+
+</div>
+
+<script>
+async function analyzeStock() {
+    const name = document.getElementById("companyInput").value.trim();
+
+    if (!name) {
+        alert("Please enter a company name.");
+        return;
+    }
+
+    document.getElementById("assessment").innerHTML = "Analyzing...";
+
+    try {
+        const response = await fetch(`/lookup?name=${encodeURIComponent(name)}`);
+        const data = await response.json();
+
+        document.getElementById("ticker").textContent = data.ticker ?? "—";
+        document.getElementById("exchange").textContent = data.exchange ?? "—";
+        document.getElementById("price").textContent = data.price ? "$" + Number(data.price).toFixed(2) : "—";
+        document.getElementById("eps").textContent = data.eps ?? "—";
+        document.getElementById("pe").textContent = data.pe ? Number(data.pe).toFixed(2) : "—";
+        document.getElementById("industry").textContent = data.industry_used ?? "—";
+        document.getElementById("peerMedian").textContent = data.peer_median_pe ? Number(data.peer_median_pe).toFixed(2) : "—";
+        document.getElementById("rating").textContent = data.assessment?.rating ?? "—";
+
+        document.getElementById("peers").innerHTML =
+            data.peers && data.peers.length
+            ? data.peers.map(p => `<span>${p}</span>`).join("")
+            : "—";
+
+        document.getElementById("assessment").innerHTML = `
+            <h3>${data.assessment?.rating ?? "Unknown"}</h3>
+            <p>${data.assessment?.explanation ?? "No explanation available."}</p>
+
+            <hr>
+
+            <h3>Future Metrics</h3>
+            <p>Revenue Growth: Coming soon</p>
+            <p>EPS Growth: Coming soon</p>
+            <p>ROE: Coming soon</p>
+            <p>ROIC: Coming soon</p>
+            <p>Debt / Equity: Coming soon</p>
+            <p>Free Cash Flow Margin: Coming soon</p>
+            <p>Gross Margin: Coming soon</p>
+            <p>Price / Sales: Coming soon</p>
+        `;
+
+    } catch (error) {
+        document.getElementById("assessment").innerHTML = "Error analyzing stock.";
+    }
+}
+</script>
+
+</body>
+</html>
