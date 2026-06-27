@@ -5,10 +5,18 @@ import os
 import json
 import re
 
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi import Request
+
 app = FastAPI(
     title="Peer Valuation Engine v10.6.4 (Stable Resolver)",
     version="10.6.4"
 )
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
 
 # ===================================================
 # ENV
@@ -550,6 +558,10 @@ def resolve_ticker(name: str):
 # ===================================================
 # MAIN API
 # ===================================================
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
 @app.get("/lookup")
 def lookup(name: str):
 
