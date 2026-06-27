@@ -149,7 +149,13 @@ def ticker_is_active(symbol):
             timeout=5
         ).json()
 
-        active = resp.get("results", {}).get("active", False)
+        result = resp.get("results")
+
+        if not result:
+            print(f"[TICKER ACTIVE UNKNOWN] {symbol} -> {resp}", flush=True)
+            return True
+
+        active = result.get("active", True)
 
         print(f"[TICKER ACTIVE] {symbol} active={active}", flush=True)
 
