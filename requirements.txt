@@ -1,5 +1,6 @@
 fastapi
 uvicorn
-yfinance
+requests
 numpy
 openai>=1.0.0
+jinja2
