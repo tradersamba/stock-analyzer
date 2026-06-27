@@ -14,8 +14,7 @@
     </header>
 
     <section class="search-box">
-        <input id="companyInput" type="text" placeholder="Enter company name, e.g. Apple">
-        <button onclick="analyzeStock()">Analyze</button>
+    <input id="companyInput" type="text" placeholder="Enter company name, e.g. Apple" onkeydown="if(event.key === 'Enter') analyzeStock()">        <button onclick="analyzeStock()">Analyze</button>
     </section>
 
     <main class="dashboard">
