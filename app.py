@@ -576,12 +576,15 @@ def lookup(name: str):
     # ===================================================
     # Price snapshot
     # ===================================================
-    snap = get_snapshot(ticker)
-    price = snap["price"]
+    price = get_finnhub_price(ticker)
+
+    print(
+        f"[MAIN PRICE FINNHUB] {ticker} -> {price}",
+        flush=True
+    )
 
     eps = get_eps(ticker)
     pe = compute_pe(price, eps)
-
     # ===================================================
     # Industry resolution
     # ===================================================
