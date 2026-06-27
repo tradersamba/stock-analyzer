@@ -137,9 +137,9 @@ def get_snapshot(symbol):
         return {"price": None}
         
 # ===================================================
-# POLYGON ACTIVE CHECK
+# STOCK EXCHANGE
 # ===================================================
-def ticker_is_active(symbol):
+def get_exchange(symbol):
     try:
         url = f"https://api.polygon.io/v3/reference/tickers/{symbol}"
 
@@ -152,25 +152,32 @@ def ticker_is_active(symbol):
         result = resp.get("results")
 
         if not result:
-            status = resp.get("status")
-            message = resp.get("message", "")
+            print(f"[EXCHANGE UNKNOWN] {symbol} -> {resp}", flush=True)
+            return "Unknown"
 
-            if status == "NOT_FOUND" or "Ticker not found" in message:
-                print(f"[TICKER ACTIVE NOT FOUND] {symbol} -> inactive", flush=True)
-                return False
+        exchange_code = (
+            result.get("primary_exchange")
+            or result.get("market")
+            or "Unknown"
+        )
 
-            print(f"[TICKER ACTIVE UNKNOWN] {symbol} -> {resp}", flush=True)
-            return True
+        exchange_map = {
+            "XNAS": "NASDAQ",
+            "XNYS": "NYSE",
+            "ARCX": "NYSE Arca",
+            "BATS": "Cboe",
+            "OTCM": "OTC Markets"
+        }
 
-        active = result.get("active", True)
+        exchange = exchange_map.get(exchange_code, exchange_code)
 
-        print(f"[TICKER ACTIVE] {symbol} active={active}", flush=True)
+        print(f"[EXCHANGE] {symbol} -> {exchange}", flush=True)
 
-        return active
+        return exchange
 
     except Exception as e:
-        print(f"[TICKER ACTIVE ERROR] {repr(e)}", flush=True)
-        return True     # don't reject because Polygon hiccupped
+        print(f"[EXCHANGE ERROR] {symbol} {repr(e)}", flush=True)
+        return "Unknown"
 
 # ===================================================
 # STOCK EXCHANGE
