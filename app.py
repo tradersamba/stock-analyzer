@@ -567,6 +567,15 @@ def resolve_ticker(name: str):
 # ===================================================
 # MAIN API
 # ===================================================
+@app.get("/debug-files")
+def debug_files():
+    return {
+        "base_dir": BASE_DIR,
+        "files": os.listdir(BASE_DIR),
+        "templates_exists": os.path.exists(os.path.join(BASE_DIR, "templates", "index.html")),
+        "static_exists": os.path.exists(os.path.join(BASE_DIR, "static", "style.css")),
+    }
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
