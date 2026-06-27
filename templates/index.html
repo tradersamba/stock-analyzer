@@ -65,6 +65,31 @@ async function analyzeStock() {
         const response = await fetch(`/lookup?name=${encodeURIComponent(name)}`);
         const data = await response.json();
 
+        if (!data.ticker) {
+            document.getElementById("ticker").textContent = "—";
+            document.getElementById("exchange").textContent = "—";
+            document.getElementById("price").textContent = "—";
+            document.getElementById("eps").textContent = "—";
+            document.getElementById("pe").textContent = "—";
+            document.getElementById("industry").textContent = "—";
+            document.getElementById("peerMedian").textContent = "—";
+            document.getElementById("rating").textContent = data.assessment?.rating ?? "Unknown";
+            document.getElementById("peers").innerHTML = "—";
+
+            document.getElementById("assessment").innerHTML = `
+                <h3>Company Not Found</h3>
+                <p>${data.assessment?.explanation ?? "This company could not be found on a U.S. stock exchange."}</p>
+
+                <hr>
+
+                <h3>Possible Reasons</h3>
+                <p>• The company may be privately held.</p>
+                <p>• The company may trade only on a foreign exchange.</p>
+                <p>• The company name may be misspelled.</p>
+            `;
+
+            return;
+
         document.getElementById("ticker").textContent = data.ticker ?? "—";
         document.getElementById("exchange").textContent = data.exchange ?? "—";
         document.getElementById("price").textContent = data.price ? "$" + Number(data.price).toFixed(2) : "—";
