@@ -10,7 +10,8 @@ body {
 }
 
 .app {
-    max-width: 1200px;
+    width: 95%;
+    max-width: 1400px;
     height: 100vh;
     margin: 0 auto;
     padding: 20px;
@@ -91,12 +92,14 @@ header p {
 }
 
 .assessment-panel {
+    display: flex;
+    flex-direction: column;
     flex: 1;
     min-height: 0;
 }
 
 .assessment-scroll {
-    height: calc(100% - 45px);
+    flex: 1;
     overflow-y: auto;
     padding-right: 10px;
     line-height: 1.5;
