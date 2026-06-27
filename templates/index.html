@@ -89,6 +89,7 @@ async function analyzeStock() {
             `;
 
             return;
+        }
 
         document.getElementById("ticker").textContent = data.ticker ?? "—";
         document.getElementById("exchange").textContent = data.exchange ?? "—";
