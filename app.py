@@ -151,13 +151,13 @@ def ticker_is_active(symbol):
 
         result = resp.get("results")
 
-        if not result:
-            status = resp.get("status")
-            message = resp.get("message", "")
+    if not result:
+        status = resp.get("status")
+        message = resp.get("message", "")
 
-            if status == "NOT_FOUND" or "Ticker not found" in message:
-            print(f"[TICKER ACTIVE NOT FOUND] {symbol} -> inactive", flush=True)
-            return False
+        if status == "NOT_FOUND" or "Ticker not found" in message:
+        print(f"[TICKER ACTIVE NOT FOUND] {symbol} -> inactive", flush=True)
+        return False
 
     print(f"[TICKER ACTIVE UNKNOWN] {symbol} -> {resp}", flush=True)
     return True
