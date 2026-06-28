@@ -463,25 +463,64 @@ def get_finnhub_price(symbol):
 # ===================================================
 # TICKER RESOLVER (FIXED CORE LOGIC)
 # ===================================================
+def llm_resolve_ticker(name: str):
 
-def resolve_ticker(name: str):
+    cache_key = clean_name(name).lower()
 
-    name_clean = clean_name(name)
-    print(f"[RESOLVE] raw={name} clean={name_clean}", flush=True)
+    if cache_key in TICKER_CACHE:
+        print(
+            f"[TICKER CACHE HIT] {cache_key} -> {TICKER_CACHE[cache_key]}",
+            flush=True
+        )
+        return TICKER_CACHE[cache_key]
 
-    llm_result = llm_resolve_ticker(name_clean)
+    try:
+        import openai
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
 
-    ticker = llm_result.get("ticker")
-    reason = llm_result.get("reason", "Company could not be resolved.")
+        print(f"[LLM ENTER] {name}", flush=True)
 
-    print(f"[LLM RESULT] ticker={ticker} reason={reason}", flush=True)
+        prompt = f"""
+Return ONLY valid US stock ticker.
 
-    if ticker and re.fullmatch(r"[A-Z]{1,5}", ticker):
-        print(f"[LLM ACCEPTED] {ticker}", flush=True)
-        return ticker
+Company: {name}
 
-    print(f"[RESOLVE FAILED] {reason}", flush=True)
-    raise HTTPException(status_code=400, detail=reason)
+Examples:
+Nvidia -> NVDA
+Intel -> INTC
+Apple -> AAPL
+Tesla -> TSLA
+IBM -> IBM
+"""
+
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+
+        raw = resp.choices[0].message.content.strip().upper()
+
+        print(f"[LLM RAW] {raw}", flush=True)
+
+        # Handles answers like: IBM -> IBM
+        if "->" in raw:
+            raw = raw.split("->")[-1].strip()
+
+        # Remove markdown/code formatting if any
+        raw = raw.replace("`", "").strip()
+
+        if re.fullmatch(r"[A-Z]{1,5}", raw):
+            TICKER_CACHE[cache_key] = raw
+            print(f"[TICKER CACHE SAVE] {cache_key} -> {raw}", flush=True)
+            return raw
+
+        return None
+
+    except Exception as e:
+        print(f"[LLM ERROR] {repr(e)}", flush=True)
+        return None
+
 
 def resolve_ticker(name: str):
 
@@ -498,7 +537,30 @@ def resolve_ticker(name: str):
         print(f"[LLM ACCEPTED WITHOUT PRICE CHECK] {llm_ticker}", flush=True)
         return llm_ticker
 
-    print("[RESOLVE FAILED] No valid ticker from LLM", flush=True)
+    # 2. Polygon fallback
+    print("[FALLBACK] Polygon search", flush=True)
+
+    url = "https://api.polygon.io/v3/reference/tickers"
+    resp = requests.get(url, params={
+        "search": name_clean,
+        "active": "true",
+        "limit": 10,
+        "apiKey": POLYGON_API_KEY
+    }, timeout=5).json()
+
+    results = resp.get("results", [])
+    print(f"[POLYGON COUNT] {len(results)}", flush=True)
+
+    if not results:
+        raise HTTPException(400, f"Ticker resolution failed for '{name}'")
+
+    # return FIRST valid ticker (do NOT require price validation)
+    for r in results:
+        symbol = r.get("ticker")
+        if symbol:
+            print(f"[POLYGON PICK] {symbol}", flush=True)
+            return symbol
+
     raise HTTPException(400, f"Ticker resolution failed for '{name}'")
 
 
@@ -530,26 +592,30 @@ def lookup(name: str):
     # ===================================================
     try:
         ticker = resolve_ticker(name)
-    except HTTPException as e:
-    return {
-        "input": name,
-        "ticker": None,
-        "price": None,
-        "eps": None,
-        "pe": None,
-        "industry_raw": "Unknown",
-        "industry_sector": "Unknown",
-        "industry_used": "Unknown",
-        "industry_llm_confidence": 0.0,
-        "peers": [],
-        "valuation_peers": [],
-        "excluded_peers": [],
-        "peer_median_pe": None,
-        "assessment": {
-            "rating": "Unknown",
-            "explanation": e.detail
+    except HTTPException:
+        return {
+            "input": name,
+            "ticker": None,
+            "price": None,
+            "eps": None,
+            "pe": None,
+            "industry_raw": "Unknown",
+            "industry_sector": "Unknown",
+            "industry_used": "Unknown",
+            "industry_llm_confidence": 0.0,
+            "peers": [],
+            "valuation_peers": [],
+            "excluded_peers": [],
+            "peer_median_pe": None,
+            "assessment": {
+                "rating": "Unknown",
+                "explanation": (
+                    "Company could not be found on a U.S. stock exchange. "
+                    "It may be a private company, listed only on a foreign exchange, "
+                    "or the company name may be misspelled."
+                )
+            }
         }
-    }
 
     ticker_active = ticker_is_active(ticker)
     exchange = get_exchange(ticker)
@@ -714,4 +780,4 @@ def lookup(name: str):
             "rating": rating,
             "explanation": explanation
         }
-    }
+    } 
