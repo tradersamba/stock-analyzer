@@ -481,16 +481,23 @@ def llm_resolve_ticker(name: str):
         print(f"[LLM ENTER] {name}", flush=True)
 
         prompt = f"""
-Return ONLY valid US stock ticker.
+Resolve this company name to a valid U.S.-listed stock ticker.
 
 Company: {name}
 
-Examples:
-Nvidia -> NVDA
-Intel -> INTC
-Apple -> AAPL
-Tesla -> TSLA
-IBM -> IBM
+Return ONLY JSON:
+
+{{
+  "ticker": "AAPL",
+  "reason": "Resolved to Apple Inc."
+}}
+
+If there is no valid U.S.-listed ticker, return:
+
+{{
+  "ticker": null,
+  "reason": "Explain why no valid U.S.-listed ticker was found."
+}}
 """
 
         resp = client.chat.completions.create(
@@ -499,28 +506,34 @@ IBM -> IBM
             temperature=0
         )
 
-        raw = resp.choices[0].message.content.strip().upper()
-
+        raw = resp.choices[0].message.content.strip()
         print(f"[LLM RAW] {raw}", flush=True)
 
-        # Handles answers like: IBM -> IBM
-        if "->" in raw:
-            raw = raw.split("->")[-1].strip()
+        cleaned = raw.replace("```json", "").replace("```", "").strip()
+        parsed = json.loads(cleaned)
 
-        # Remove markdown/code formatting if any
-        raw = raw.replace("`", "").strip()
+        ticker = parsed.get("ticker")
+        reason = parsed.get("reason", "No explanation provided.")
 
-        if re.fullmatch(r"[A-Z]{1,5}", raw):
-            TICKER_CACHE[cache_key] = raw
-            print(f"[TICKER CACHE SAVE] {cache_key} -> {raw}", flush=True)
-            return raw
+        if ticker:
+            ticker = ticker.upper().strip()
 
-        return None
+        result = {
+            "ticker": ticker,
+            "reason": reason
+        }
+
+        TICKER_CACHE[cache_key] = result
+        print(f"[TICKER CACHE SAVE] {cache_key} -> {result}", flush=True)
+
+        return result
 
     except Exception as e:
         print(f"[LLM ERROR] {repr(e)}", flush=True)
-        return None
-
+        return {
+            "ticker": None,
+            "reason": "Ticker resolution failed."
+        }
 
 def resolve_ticker(name: str):
 
@@ -570,6 +583,7 @@ def lookup(name: str):
     # ===================================================
     try:
         ticker = resolve_ticker(name)
+
     except HTTPException as e:
         return {
             "input": name,
@@ -588,7 +602,7 @@ def lookup(name: str):
             "assessment": {
                 "rating": "Unknown",
                 "explanation": e.detail
-            )
+            }
         }
 
     ticker_active = ticker_is_active(ticker)
