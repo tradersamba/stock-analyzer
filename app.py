@@ -527,41 +527,19 @@ def resolve_ticker(name: str):
     name_clean = clean_name(name)
     print(f"[RESOLVE] raw={name} clean={name_clean}", flush=True)
 
-    # 1. LLM attempt (optional)
-    llm_ticker = llm_resolve_ticker(name_clean)
-    print(f"[LLM RESULT] {llm_ticker}", flush=True)
+    llm_result = llm_resolve_ticker(name_clean)
 
-    # IMPORTANT FIX:
-    # DO NOT reject symbol just because price is missing
-    if llm_ticker:
-        print(f"[LLM ACCEPTED WITHOUT PRICE CHECK] {llm_ticker}", flush=True)
-        return llm_ticker
+    ticker = llm_result.get("ticker")
+    reason = llm_result.get("reason", "Company could not be resolved.")
 
-    # 2. Polygon fallback
-    print("[FALLBACK] Polygon search", flush=True)
+    print(f"[LLM RESULT] ticker={ticker} reason={reason}", flush=True)
 
-    url = "https://api.polygon.io/v3/reference/tickers"
-    resp = requests.get(url, params={
-        "search": name_clean,
-        "active": "true",
-        "limit": 10,
-        "apiKey": POLYGON_API_KEY
-    }, timeout=5).json()
+    if ticker and re.fullmatch(r"[A-Z]{1,5}", ticker):
+        print(f"[LLM ACCEPTED] {ticker}", flush=True)
+        return ticker
 
-    results = resp.get("results", [])
-    print(f"[POLYGON COUNT] {len(results)}", flush=True)
-
-    if not results:
-        raise HTTPException(400, f"Ticker resolution failed for '{name}'")
-
-    # return FIRST valid ticker (do NOT require price validation)
-    for r in results:
-        symbol = r.get("ticker")
-        if symbol:
-            print(f"[POLYGON PICK] {symbol}", flush=True)
-            return symbol
-
-    raise HTTPException(400, f"Ticker resolution failed for '{name}'")
+    print(f"[RESOLVE FAILED] {reason}", flush=True)
+    raise HTTPException(status_code=400, detail=reason)
 
 
 # ===================================================
@@ -592,7 +570,7 @@ def lookup(name: str):
     # ===================================================
     try:
         ticker = resolve_ticker(name)
-    except HTTPException:
+    except HTTPException as e:
         return {
             "input": name,
             "ticker": None,
@@ -609,12 +587,8 @@ def lookup(name: str):
             "peer_median_pe": None,
             "assessment": {
                 "rating": "Unknown",
-                "explanation": (
-                    "Company could not be found on a U.S. stock exchange. "
-                    "It may be a private company, listed only on a foreign exchange, "
-                    "or the company name may be misspelled."
-                )
-            }
+                "explanation": e.detail
+            )
         }
 
     ticker_active = ticker_is_active(ticker)
