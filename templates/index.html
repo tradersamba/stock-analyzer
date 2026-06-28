@@ -78,14 +78,20 @@ async function analyzeStock() {
 
             document.getElementById("assessment").innerHTML = `
                 <h3>Company Not Found</h3>
-                <p>${data.assessment?.explanation ?? "This company could not be found on a U.S. stock exchange."}</p>
+
+                <p>
+                    ${data.assessment?.explanation ??
+                    "This company could not be resolved to a supported U.S. stock ticker."}
+                </p>
 
                 <hr>
 
                 <h3>Possible Reasons</h3>
+
                 <p>• The company may be privately held.</p>
-                <p>• The company may trade only on a foreign exchange.</p>
+                <p>• The company may trade only on a foreign stock exchange.</p>
                 <p>• The company name may be misspelled.</p>
+                <p>• The company may be a recent IPO, merger, or ticker change that is not yet recognized by the current AI ticker lookup.</p>
             `;
 
             return;
