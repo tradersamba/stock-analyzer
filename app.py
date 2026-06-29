@@ -400,6 +400,9 @@ SNAPSHOT_CACHE = {}
 TICKER_CACHE = {}
 INDUSTRY_LLM_CACHE = {}
 
+# ===================================================
+# EPS
+# ===================================================
 def get_eps(symbol):
 
     if symbol in EPS_CACHE:
@@ -408,6 +411,7 @@ def get_eps(symbol):
 
     try:
         url = "https://finnhub.io/api/v1/stock/metric"
+
         resp = requests.get(
             url,
             params={
@@ -418,6 +422,9 @@ def get_eps(symbol):
             timeout=5
         ).json()
 
+        # DEBUG: Show everything Finnhub returned
+        print(f"[FINNHUB METRIC RAW] {symbol} -> {resp}", flush=True)
+
         eps = resp.get("metric", {}).get("epsTTM")
 
         EPS_CACHE[symbol] = eps
@@ -426,7 +433,8 @@ def get_eps(symbol):
 
         return eps
 
-    except Exception:
+    except Exception as e:
+        print(f"[EPS ERROR] {symbol} {repr(e)}", flush=True)
         return None
 
 # ===================================================
