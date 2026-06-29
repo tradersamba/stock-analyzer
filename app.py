@@ -674,6 +674,16 @@ Rules:
             else:
                 print(f"[PEER REJECTED] {p} invalid price={price}", flush=True)
 
+        if len(validated_peers) < 5:
+            print(
+                f"[COMPANY PROFILE REJECTED] {cache_key} only {len(validated_peers)} valid peers",
+                flush=True
+            )
+            return {
+                "industry_sector": parsed.get("industry_sector", "Unknown"),
+                "peers": [],
+                "reason": "Company profile rejected because too few valid peers were returned."
+            }
         parsed["peers"] = validated_peers[:7]
 
         COMPANY_PROFILE_CACHE[cache_key] = parsed
