@@ -552,35 +552,26 @@ def resolve_ticker(name: str):
     ticker = llm_result.get("ticker")
     reason = llm_result.get("reason", "Company could not be resolved.")
 
-print(f"[LLM RESULT] ticker={ticker} reason={reason}", flush=True)
+    print(f"[LLM RESULT] ticker={ticker} reason={reason}", flush=True)
 
-# ---------------------------------------------------
-# LLM succeeded
-# ---------------------------------------------------
-if ticker and re.fullmatch(r"[A-Z]{1,5}", ticker):
-    print(f"[LLM ACCEPTED] {ticker}", flush=True)
-    return ticker
+    if ticker and re.fullmatch(r"[A-Z]{1,5}", ticker):
+        print(f"[LLM ACCEPTED] {ticker}", flush=True)
+        return ticker
 
-# ---------------------------------------------------
-# Special fallback tickers
-# ---------------------------------------------------
-clean = name_clean.lower()
+    clean = name_clean.lower()
 
-if clean in SPECIAL_FALLBACKS:
-    ticker = SPECIAL_FALLBACKS[clean]
+    if clean in SPECIAL_FALLBACKS:
+        ticker = SPECIAL_FALLBACKS[clean]
 
-    print(
-        f"[SPECIAL FALLBACK] {clean} -> {ticker}",
-        flush=True
-    )
+        print(
+            f"[SPECIAL FALLBACK] {clean} -> {ticker}",
+            flush=True
+        )
 
-    return ticker
+        return ticker
 
-# ---------------------------------------------------
-# No ticker found
-# ---------------------------------------------------
-print(f"[RESOLVE FAILED] {reason}", flush=True)
-raise HTTPException(status_code=400, detail=reason)
+    print(f"[RESOLVE FAILED] {reason}", flush=True)
+    raise HTTPException(status_code=400, detail=reason)
 
 
 # ===================================================
