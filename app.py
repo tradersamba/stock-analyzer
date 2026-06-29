@@ -631,13 +631,13 @@ Return ONLY JSON with this exact structure:
 
 {{
   "industry_sector": "short industry description",
-  "peers": ["TICK1", "TICK2", "TICK3", "TICK4", "TICK5"],
+  "peers": ["TICK1", "TICK2", "TICK3", "TICK4", "TICK5", "TICK6", "TICK7"],
   "reason": "brief explanation"
 }}
 
 Rules:
-- Choose 5 to 7 publicly traded U.S.-listed peer tickers.
-- Peers should be similar in industry and reasonably similar in company size.
+- Choose exactly 7 publicly traded U.S.-listed peer tickers.
+Peers should be similar in industry, business model, and market capitalization. Choose the companies that professional equity analysts would most likely use as comparables.
 - Return ticker symbols only.
 - Do not include the target ticker itself in the peer list.
 - If perfect peers do not exist, choose the closest reasonable public comparables.
