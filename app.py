@@ -761,8 +761,12 @@ def lookup(name: str):
     llm_result = map_industry_llm(fin_industry, fin_sector)
     industry_used, confidence = resolve_industry(fin_industry, fin_sector, llm_result)
 
-    peers = INDUSTRY_PEERS.get(industry_used, [])
+    peers = company_profile.get("peers", [])
 
+    if not peers:
+        print("[PEER FALLBACK] Using static industry peers", flush=True)
+        peers = INDUSTRY_PEERS.get(industry_used, [])
+    
     # ===================================================
     # Peer valuation
     # ===================================================
