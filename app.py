@@ -636,11 +636,11 @@ Return ONLY JSON with this exact structure:
 }}
 
 Rules:
-- Choose exactly seven publicly traded companies listed on major U.S. stock exchanges (NYSE or NASDAQ) that professional equity analysts would most likely use as valuation comparables.
+- Choose exactly seven publicly traded companies listed on U.S. stock exchanges that professional equity analysts would most likely use as valuation comparables.
 - Focus on companies that compete for similar customers, have similar business models, and are reasonably comparable in market capitalization.
-- Return only valid U.S. stock ticker symbols.
-- Do not include the target company itself in the peer list.
-- If perfect peers do not exist, choose the closest publicly traded U.S. comparables.
+- Return only valid U.S.-listed stock ticker symbols.
+- Do not include the target company itself.
+- If perfect peers do not exist, choose the closest publicly traded U.S.-listed comparables.
 """
 
         resp = client.chat.completions.create(
