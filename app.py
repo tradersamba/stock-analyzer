@@ -710,6 +710,13 @@ def lookup(name: str):
     try:
         ticker = resolve_ticker(name)
 
+        company_profile = llm_company_profile(name, ticker)
+
+        print(
+            f"[COMPANY PROFILE] {company_profile}",
+            flush=True
+        )
+
     except HTTPException as e:
         return {
             "input": name,
