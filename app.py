@@ -422,10 +422,26 @@ def get_eps(symbol):
             timeout=5
         ).json()
 
-        # DEBUG: Show everything Finnhub returned
-        print(f"[FINNHUB METRIC RAW] {symbol} -> {resp}", flush=True)
 
-        eps = resp.get("metric", {}).get("epsTTM")
+        metric = resp.get("metric", {})
+
+        # Try the best EPS fields in order
+        EPS_FIELDS = [
+            "epsTTM",
+            "epsBasicExclExtraItemsTTM",
+            "epsExclExtraItemsTTM",
+            "epsInclExtraItemsTTM",
+            "epsAnnual",   # Fallback for recent IPOs
+        ]
+
+        eps = None
+
+        for field in EPS_FIELDS:
+            value = metric.get(field)
+            if value is not None:
+                eps = value
+                print(f"[EPS FIELD USED] {symbol} -> {field} = {value}", flush=True)
+                break
 
         EPS_CACHE[symbol] = eps
 
