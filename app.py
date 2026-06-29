@@ -656,13 +656,25 @@ Rules:
         parsed = json.loads(cleaned)
 
         peers = parsed.get("peers", [])
-        peers = [
+
+        raw_peers = [
             p.upper().strip()
             for p in peers
             if isinstance(p, str) and re.fullmatch(r"[A-Z]{1,5}", p.upper().strip())
         ]
 
-        parsed["peers"] = peers[:7]
+        validated_peers = []
+
+        for p in raw_peers:
+            price = get_finnhub_price(p)
+
+            if price is not None and price > 0:
+                validated_peers.append(p)
+                print(f"[PEER VALIDATED] {p} price={price}", flush=True)
+            else:
+                print(f"[PEER REJECTED] {p} invalid price={price}", flush=True)
+
+        parsed["peers"] = validated_peers[:7]
 
         COMPANY_PROFILE_CACHE[cache_key] = parsed
 
