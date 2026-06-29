@@ -445,14 +445,11 @@ def get_eps(symbol):
                 print(f"[EPS FIELD USED] {symbol} -> {field} = {value}", flush=True)
                 break
 
-        EPS_CACHE[symbol] = {
-            "eps": eps,
-            "field": eps_field
-        }
+        EPS_CACHE[symbol] = eps
 
         print(f"[EPS CACHE SAVE] {symbol} -> {eps}", flush=True)
 
-        return EPS_CACHE[symbol]
+        return eps
 
     except Exception as e:
         print(f"[EPS ERROR] {symbol} {repr(e)}", flush=True)
