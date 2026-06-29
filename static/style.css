@@ -1,3 +1,13 @@
+@keyframes pulse {
+    0%   { opacity: 1; }
+    50%  { opacity: 0.3; }
+    100% { opacity: 1; }
+}
+
+.analyzing {
+    animation: pulse 1s infinite ease-in-out;
+}
+
 * {
     box-sizing: border-box;
 }
