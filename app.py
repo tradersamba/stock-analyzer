@@ -399,6 +399,7 @@ SNAPSHOT_CACHE = {}
 
 TICKER_CACHE = {}
 INDUSTRY_LLM_CACHE = {}
+COMPANY_PROFILE_CACHE = {}
 
 # ===================================================
 # EPS
