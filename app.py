@@ -807,7 +807,7 @@ def lookup(name: str):
             "pe": pe,
             "industry_raw": fin_industry,
             "industry_sector": fin_sector,
-            "industry_used": industry_used,
+            "industry_used": company_profile.get("industry_sector", industry_used),
             "industry_llm_confidence": confidence,
             "peers": peers,
             "valuation_peers": valuation_peers,
@@ -838,7 +838,7 @@ def lookup(name: str):
             "pe": pe,
             "industry_raw": fin_industry,
             "industry_sector": fin_sector,
-            "industry_used": industry_used,
+            "industry_used": company_profile.get("industry_sector", industry_used),
             "industry_llm_confidence": confidence,
             "peers": peers,
             "valuation_peers": valuation_peers,
@@ -892,7 +892,7 @@ def lookup(name: str):
 
         "industry_raw": fin_industry,
         "industry_sector": fin_sector,
-        "industry_used": industry_used,
+        "industry_used": company_profile.get("industry_sector", industry_used),
         "industry_llm_confidence": confidence,
 
         "peers": peers,
