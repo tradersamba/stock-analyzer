@@ -435,19 +435,24 @@ def get_eps(symbol):
         ]
 
         eps = None
-
+        eps_field = None
+    
         for field in EPS_FIELDS:
             value = metric.get(field)
             if value is not None:
                 eps = value
+                eps_field = field
                 print(f"[EPS FIELD USED] {symbol} -> {field} = {value}", flush=True)
                 break
 
-        EPS_CACHE[symbol] = eps
+        EPS_CACHE[symbol] = {
+            "eps": eps,
+            "field": eps_field
+        }ol] = eps
 
         print(f"[EPS CACHE SAVE] {symbol} -> {eps}", flush=True)
 
-        return eps
+        return EPS_CACHE[symbol]
 
     except Exception as e:
         print(f"[EPS ERROR] {symbol} {repr(e)}", flush=True)
