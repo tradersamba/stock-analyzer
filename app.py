@@ -636,11 +636,11 @@ Return ONLY JSON with this exact structure:
 }}
 
 Rules:
-- Choose exactly 7 publicly traded U.S.-listed peer tickers.
-Peers should be similar in industry, business model, and market capitalization. Choose the companies that professional equity analysts would most likely use as comparables.
-- Return ticker symbols only.
-- Do not include the target ticker itself in the peer list.
-- If perfect peers do not exist, choose the closest reasonable public comparables.
+- Choose exactly seven publicly traded companies listed on major U.S. stock exchanges (NYSE or NASDAQ) that professional equity analysts would most likely use as valuation comparables.
+- Focus on companies that compete for similar customers, have similar business models, and are reasonably comparable in market capitalization.
+- Return only valid U.S. stock ticker symbols.
+- Do not include the target company itself in the peer list.
+- If perfect peers do not exist, choose the closest publicly traded U.S. comparables.
 """
 
         resp = client.chat.completions.create(
