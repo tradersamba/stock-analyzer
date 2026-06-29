@@ -10,6 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi import Request
 
+# ===================================================
+# SPECIAL FALLBACK TICKERS
+# ===================================================
+SPECIAL_FALLBACKS = {
+    "spacex": "SPCX",
+}
+
 app = FastAPI(
     title="Peer Valuation Engine v10.6.4 (Stable Resolver)",
     version="10.6.4"
@@ -545,14 +552,35 @@ def resolve_ticker(name: str):
     ticker = llm_result.get("ticker")
     reason = llm_result.get("reason", "Company could not be resolved.")
 
-    print(f"[LLM RESULT] ticker={ticker} reason={reason}", flush=True)
+print(f"[LLM RESULT] ticker={ticker} reason={reason}", flush=True)
 
-    if ticker and re.fullmatch(r"[A-Z]{1,5}", ticker):
-        print(f"[LLM ACCEPTED] {ticker}", flush=True)
-        return ticker
+# ---------------------------------------------------
+# LLM succeeded
+# ---------------------------------------------------
+if ticker and re.fullmatch(r"[A-Z]{1,5}", ticker):
+    print(f"[LLM ACCEPTED] {ticker}", flush=True)
+    return ticker
 
-    print(f"[RESOLVE FAILED] {reason}", flush=True)
-    raise HTTPException(status_code=400, detail=reason)
+# ---------------------------------------------------
+# Special fallback tickers
+# ---------------------------------------------------
+clean = name_clean.lower()
+
+if clean in SPECIAL_FALLBACKS:
+    ticker = SPECIAL_FALLBACKS[clean]
+
+    print(
+        f"[SPECIAL FALLBACK] {clean} -> {ticker}",
+        flush=True
+    )
+
+    return ticker
+
+# ---------------------------------------------------
+# No ticker found
+# ---------------------------------------------------
+print(f"[RESOLVE FAILED] {reason}", flush=True)
+raise HTTPException(status_code=400, detail=reason)
 
 
 # ===================================================
