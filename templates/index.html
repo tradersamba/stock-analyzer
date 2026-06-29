@@ -60,7 +60,7 @@ async function analyzeStock() {
     }
 
     document.getElementById("assessment").innerHTML =
-    '<span class="analyzing">Analyzing...</span>';
+    '<span class="analyzing">Analyzing now...</span>';
     try {
         const response = await fetch(`/lookup?name=${encodeURIComponent(name)}`);
         const data = await response.json();
