@@ -600,6 +600,86 @@ def resolve_ticker(name: str):
     print(f"[RESOLVE FAILED] {reason}", flush=True)
     raise HTTPException(status_code=400, detail=reason)
 
+# ===================================================
+# LLM COMPANY PROFILE
+# ticker + industry sector + peers
+# ===================================================
+def llm_company_profile(name: str, ticker: str):
+
+    cache_key = f"{clean_name(name).lower()}|{ticker}"
+
+    if cache_key in COMPANY_PROFILE_CACHE:
+        print(
+            f"[COMPANY PROFILE CACHE HIT] {cache_key} -> {COMPANY_PROFILE_CACHE[cache_key]}",
+            flush=True
+        )
+        return COMPANY_PROFILE_CACHE[cache_key]
+
+    try:
+        import openai
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+
+        print(f"[COMPANY PROFILE LLM ENTER] name={name} ticker={ticker}", flush=True)
+
+        prompt = f"""
+You are helping a stock valuation app.
+
+Company name: {name}
+Ticker: {ticker}
+
+Return ONLY JSON with this exact structure:
+
+{{
+  "industry_sector": "short industry description",
+  "peers": ["TICK1", "TICK2", "TICK3", "TICK4", "TICK5"],
+  "reason": "brief explanation"
+}}
+
+Rules:
+- Choose 5 to 7 publicly traded U.S.-listed peer tickers.
+- Peers should be similar in industry and reasonably similar in company size.
+- Return ticker symbols only.
+- Do not include the target ticker itself in the peer list.
+- If perfect peers do not exist, choose the closest reasonable public comparables.
+"""
+
+        resp = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+
+        raw = resp.choices[0].message.content.strip()
+        print(f"[COMPANY PROFILE LLM RAW] {raw}", flush=True)
+
+        cleaned = raw.replace("```json", "").replace("```", "").strip()
+        parsed = json.loads(cleaned)
+
+        peers = parsed.get("peers", [])
+        peers = [
+            p.upper().strip()
+            for p in peers
+            if isinstance(p, str) and re.fullmatch(r"[A-Z]{1,5}", p.upper().strip())
+        ]
+
+        parsed["peers"] = peers[:7]
+
+        COMPANY_PROFILE_CACHE[cache_key] = parsed
+
+        print(
+            f"[COMPANY PROFILE CACHE SAVE] {cache_key} -> {parsed}",
+            flush=True
+        )
+
+        return parsed
+
+    except Exception as e:
+        print(f"[COMPANY PROFILE LLM ERROR] {repr(e)}", flush=True)
+        return {
+            "industry_sector": "Unknown",
+            "peers": [],
+            "reason": "Company profile LLM failed."
+        }
 
 # ===================================================
 # MAIN API
