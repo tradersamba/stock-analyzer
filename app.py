@@ -448,7 +448,7 @@ def get_eps(symbol):
         EPS_CACHE[symbol] = {
             "eps": eps,
             "field": eps_field
-        }ol] = eps
+        }
 
         print(f"[EPS CACHE SAVE] {symbol} -> {eps}", flush=True)
 
