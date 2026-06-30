@@ -141,6 +141,13 @@ header p {
     flex-direction: column;
 }
 
+.pe-help-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding-right: 10px;
+    line-height: 1.6;
+}
+
 .pe-help-panel h2{
     margin-top:0;
 }
