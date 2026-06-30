@@ -44,7 +44,7 @@
 <section class="analysis-row" style="display:grid; grid-template-columns:2fr 1fr; gap:20px; align-items:stretch;">
 
     <div class="assessment-panel">
-        <h2>Assessment</h2>
+        <h2>P/E Ratio Analysis</h2>
         <div id="assessment" class="assessment-scroll">
             Enter a company name and click Analyze.
         </div>
@@ -140,16 +140,6 @@ async function analyzeStock() {
             <p>${data.assessment?.explanation ?? "No explanation available."}</p>
 
             <hr>
-
-            <h3>Future Metrics</h3>
-            <p>Revenue Growth: Coming soon</p>
-            <p>EPS Growth: Coming soon</p>
-            <p>ROE: Coming soon</p>
-            <p>ROIC: Coming soon</p>
-            <p>Debt / Equity: Coming soon</p>
-            <p>Free Cash Flow Margin: Coming soon</p>
-            <p>Gross Margin: Coming soon</p>
-            <p>Price / Sales: Coming soon</p>
         `;
 
     } catch (error) {
