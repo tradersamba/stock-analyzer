@@ -223,7 +223,7 @@ header p {
 
 .assessment-panel,
 .pe-help-panel {
-    height: 600px;   /* adjust this value */
+    height: 475px;   /* adjust this value */
     min-height: 0;
 }
 
