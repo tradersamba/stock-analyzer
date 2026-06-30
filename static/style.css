@@ -215,3 +215,21 @@ header p {
 .tooltip:hover .tooltip-popup {
     display: block;
 }
+
+/* Force bottom row panels to equal fixed height */
+.analysis-row {
+    align-items: stretch;
+}
+
+.assessment-panel,
+.pe-help-panel {
+    height: 320px;   /* adjust this value */
+    min-height: 0;
+}
+
+.assessment-scroll,
+.pe-help-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+}
