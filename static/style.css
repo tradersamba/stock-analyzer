@@ -157,3 +157,15 @@ header p {
     }
 
 }
+
+.description-placeholder {
+    height: 100%;
+    min-height: 180px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(0,0,0,0.12);
+    font-size: 32px;
+    font-weight: 300;
+    user-select: none;
+}
