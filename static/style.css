@@ -169,3 +169,43 @@ header p {
     font-weight: 300;
     user-select: none;
 }
+
+/* ==========================================
+   Universal Tooltips
+========================================== */
+
+.tooltip {
+    position: relative;
+    display: inline-block;
+    border-bottom: 1px dotted #666;
+    cursor: help;
+}
+
+.tooltip-popup {
+    position: absolute;
+
+    display: none;
+
+    width: 300px;
+
+    background: #333;
+    color: #fff;
+
+    border-radius: 8px;
+    padding: 12px;
+
+    font-size: 13px;
+    line-height: 1.5;
+
+    left: 50%;
+    bottom: 125%;
+    transform: translateX(-50%);
+
+    z-index: 1000;
+
+    box-shadow: 0 4px 12px rgba(0,0,0,.3);
+}
+
+.tooltip:hover .tooltip-popup {
+    display: block;
+}
