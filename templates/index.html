@@ -9,12 +9,12 @@
 <div class="app">
 
     <header>
-        <h1>Peer Valuation Engine</h1>
-        <p>Company valuation compared to industry peers</p>
+        <h1>The Stock Analyzer</h1>
+        <p>Analyze stocks like a Investment Pro</p>
     </header>
 
     <section class="search-box">
-    <input id="companyInput" type="text" placeholder="Enter company name, e.g. Apple" onkeydown="if(event.key === 'Enter') analyzeStock()">        <button onclick="analyzeStock()">Analyze</button>
+    <input id="companyInput" type="text" placeholder="Enter company or ticker name, e.g. Apple" onkeydown="if(event.key === 'Enter') analyzeStock()">        <button onclick="analyzeStock()">Analyze</button>
     </section>
 
     <main class="dashboard">
@@ -42,7 +42,7 @@
     </main>
 
     <section class="assessment-panel">
-        <h2>Assessment</h2>
+        <h2>PE Ratio Analysis</h2>
         <div id="assessment" class="assessment-scroll">
             Enter a company name and click Analyze.
         </div>
