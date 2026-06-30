@@ -115,22 +115,34 @@ async function analyzeStock() {
         document.getElementById("rating").textContent = data.assessment?.rating ?? "—";
 
         document.getElementById("peHelpPanel").innerHTML = `
-            <h2>What is P/E Ratio?</h2>
+            <h2>What is the P/E Ratio?</h2>
 
             <p>
-                The P/E ratio compares a company's stock price to its earnings per share.
+                The P/E (Price-to-Earnings) ratio is one of the most common ways investors judge whether a stock is reasonably priced.
             </p>
 
             <p>
-                <strong>P/E = Stock Price ÷ EPS</strong>
+                It compares a company's current stock price to the profit the company earns for each share of stock.
             </p>
 
             <p>
-                A higher P/E may mean investors expect stronger future growth, while a lower P/E may suggest the stock is cheaper compared to earnings.
+                <strong>P/E = Stock Price ÷ Earnings Per Share (EPS)</strong>
             </p>
 
             <p>
-                This analyzer compares the company's P/E ratio against similar peer companies to estimate whether the stock appears undervalued, fairly valued, or overvalued.
+                A company's P/E ratio becomes much more meaningful when compared with similar companies in the same industry.
+            </p>
+
+            <p>
+                <strong>If a company's P/E ratio is lower than its peers</strong>, the stock may be undervalued. If the market later recognizes that the company deserves a valuation similar to its peers, the stock price has the potential to rise.
+            </p>
+
+            <p>
+                <strong>If a company's P/E ratio is higher than its peers</strong>, investors are paying a premium because they expect stronger future growth. If the company delivers that growth, the higher valuation may be justified. If not, the stock price may have limited upside or could decline.
+            </p>
+
+            <p>
+                This analyzer compares the company's P/E ratio with carefully selected peer companies to estimate whether the stock appears <strong>undervalued</strong>, <strong>fairly valued</strong>, or <strong>overvalued</strong>.
             </p>
         `;
 
