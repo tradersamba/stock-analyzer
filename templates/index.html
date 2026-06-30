@@ -59,6 +59,43 @@
 </div>
 
 <script>
+
+const tooltips = {
+
+    eps: `
+        <strong>EPS (Earnings Per Share)</strong><br><br>
+
+        The amount of profit the company earns for each share of stock.<br><br>
+
+        <strong>EPS = Net Profit (last 12 months) ÷ Total Shares Outstanding</strong><br><br>
+
+        Example:<br>
+
+        Net Profit = $10 Billion<br>
+
+        Shares Outstanding = 2 Billion<br>
+
+        EPS = $5.00 per share
+    `
+
+};
+
+function tooltip(term, text) {
+
+    return `
+        <span class="tooltip">
+
+            ${text}
+
+            <span class="tooltip-popup">
+                ${tooltips[term]}
+            </span>
+
+        </span>
+    `;
+
+}
+    
 async function analyzeStock() {
     const name = document.getElementById("companyInput").value.trim();
 
@@ -126,7 +163,9 @@ async function analyzeStock() {
             </p>
 
             <p>
-                <strong>P/E = Stock Price ÷ Earnings Per Share (EPS)</strong>
+                <strong>
+                    P/E = Stock Price ÷ Earnings Per Share (${tooltip("eps","EPS")})
+                </strong>
             </p>
 
             <p>
