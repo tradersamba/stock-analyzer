@@ -114,6 +114,27 @@ async function analyzeStock() {
         document.getElementById("peerMedian").textContent = data.peer_median_pe ? Number(data.peer_median_pe).toFixed(2) : "—";
         document.getElementById("rating").textContent = data.assessment?.rating ?? "—";
 
+        document.getElementById("peHelpPanel").innerHTML = `
+            <h2>What is P/E Ratio?</h2>
+
+            <p>
+                The P/E ratio compares a company's stock price to its earnings per share.
+            </p>
+
+            <p>
+                <strong>P/E = Stock Price ÷ EPS</strong>
+            </p>
+
+            <p>
+                A higher P/E may mean investors expect stronger future growth, while a lower P/E may suggest the stock is cheaper compared to earnings.
+            </p>
+
+            <p>
+                This analyzer compares the company's P/E ratio against similar peer companies to estimate whether the stock appears undervalued, fairly valued, or overvalued.
+            </p>
+        `;
+
+        
         document.getElementById("peers").innerHTML =
             data.peers && data.peers.length
             ? data.peers.map(p => `<span>${p}</span>`).join("")
