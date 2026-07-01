@@ -96,6 +96,17 @@ function tooltip(term, text) {
     `;
 
 }
+
+function analyzePeerTicker(ticker) {
+    document.getElementById("companyInput").value = ticker;
+
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
+
+    analyzeStock();
+}
     
 async function analyzeStock() {
     const name = document.getElementById("companyInput").value.trim();
@@ -189,7 +200,11 @@ async function analyzeStock() {
         
         document.getElementById("peers").innerHTML =
             data.peers && data.peers.length
-            ? data.peers.map(p => `<span>${p}</span>`).join("")
+            ? data.peers.map(p => `
+                <span class="peer-chip" onclick="analyzePeerTicker('${p}')">
+                    ${p}
+                </span>
+              `).join("")
             : "—";
 
         const rating = data.assessment?.rating ?? "Unknown";
