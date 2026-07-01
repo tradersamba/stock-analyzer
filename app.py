@@ -236,6 +236,27 @@ def get_exchange(symbol):
         return "Unknown"
 
 # ===================================================
+# COMPANY NAME
+# ===================================================
+def get_company_name(symbol):
+    try:
+        url = f"https://api.polygon.io/v3/reference/tickers/{symbol}"
+
+        resp = requests.get(
+            url,
+            params={"apiKey": POLYGON_API_KEY},
+            timeout=5
+        ).json()
+
+        result = resp.get("results", {})
+
+        return result.get("name", symbol)
+
+    except Exception:
+        return symbol
+
+
+# ===================================================
 # FINNHUB INDUSTRY
 # ===================================================
 def get_finnhub_industry(symbol: str):
@@ -762,6 +783,8 @@ def lookup(name: str):
 
     ticker_active = ticker_is_active(ticker)
     exchange = get_exchange(ticker)
+
+    company_name = get_company_name(ticker)
     
     # ===================================================
     # Price snapshot
@@ -823,6 +846,7 @@ def lookup(name: str):
         return {
             "input": name,
             "ticker": ticker,
+            "company_name": company_name,
             "exchange": exchange,
             "price": price,
             "eps": eps,
@@ -855,6 +879,7 @@ def lookup(name: str):
         return {
             "input": name,
             "ticker": ticker,
+            "company_name": company_name,
             "exchange": exchange,
             "price": price,
             "eps": eps,
@@ -911,6 +936,7 @@ def lookup(name: str):
     return {
         "input": name,
         "ticker": ticker,
+        "company_name": company_name,
         "exchange": exchange,
         "price": price,
         "eps": eps,
