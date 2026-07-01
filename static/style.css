@@ -297,3 +297,14 @@ header p {
     color: var(--orange);
     font-weight:bold;
 }
+
+.peer-chip {
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.peer-chip:hover {
+    background: var(--accent-blue);
+    color: white;
+    transform: translateY(-1px);
+}
