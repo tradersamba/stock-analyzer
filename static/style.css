@@ -216,9 +216,12 @@ header p {
 ========================================== */
 
 .tooltip {
+    position: relative;
+    display: inline-block;
     color: var(--accent-blue);
     border-bottom: 1px dotted var(--accent-blue);
     cursor: help;
+    z-index: 10;
 }
 
 .tooltip-popup {
@@ -248,7 +251,7 @@ header p {
 }
 
 .tooltip:hover .tooltip-popup {
-    display: block;
+    display: block !important;
 }
 
 /* Force bottom row panels to equal fixed height */
