@@ -1,3 +1,12 @@
+:root {
+    --accent-blue: #3d7bfd;
+    --green: #34c759;
+    --red: #ff4d4f;
+    --orange: #ff9800;
+    --panel: #2a2f36;
+    --background: #1b1f24;
+}
+
 @keyframes pulse {
     0%   { opacity: 1; }
     50%  { opacity: 0.3; }
@@ -15,8 +24,8 @@
 body {
     margin: 0;
     font-family: Arial, sans-serif;
-    background: #f4f6f8;
-    color: #222;
+    background: #1b1f24;
+    color: #e6e6e6;
 }
 
 .app {
@@ -36,16 +45,32 @@ header {
 
 header h1 {
     margin: 0;
+    color: var(--accent-blue);
+}
+
+.left-panel h2,
+.right-panel h2,
+.assessment-panel h2,
+.pe-help-panel h2 {
+    color: var(--accent-blue);
 }
 
 header p {
     margin: 6px 0 0;
-    color: #666;
+    color: #b8b8b8;
 }
 
-.search-box {
-    display: flex;
-    gap: 10px;
+.search-box input {
+    flex: 1;
+    padding: 12px;
+    font-size: 16px;
+    background: #31363d;
+    color: white;
+    border: 1px solid #555;
+}
+
+.search-box input::placeholder {
+    color: #999;
 }
 
 .search-box input {
@@ -58,6 +83,14 @@ header p {
     padding: 12px 24px;
     font-size: 16px;
     cursor: pointer;
+    background: #3d7bfd;
+    color: white;
+    border: none;
+    border-radius: 6px;
+}
+
+.search-box button:hover {
+    background: #2f68d9;
 }
 
 .dashboard {
@@ -70,10 +103,11 @@ header p {
 .left-panel,
 .right-panel,
 .assessment-panel {
-    background: white;
+    background: #2a2f36;
     border-radius: 10px;
     padding: 18px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    color: #e6e6e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.45);
 }
 
 .info-grid {
@@ -85,13 +119,15 @@ header p {
 
 .info-grid div:nth-child(odd) {
     font-weight: bold;
-    color: #555;
+    color: #9fb3c8;
 }
 
-.peer-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+.peer-list span {
+    background: #3b4552;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 16px;
+    font-size: 14px;
 }
 
 .peer-list span {
@@ -132,10 +168,11 @@ header p {
 }
 
 .pe-help-panel {
-    background: #ffffff;
+    background: #2a2f36;
     border-radius: 10px;
     padding: 18px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    color: #e6e6e6;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.45);
 
     display: flex;
     flex-direction: column;
