@@ -259,7 +259,7 @@ def get_company_name(symbol):
 # ===================================================
 # FINNHUB INDUSTRY
 # ===================================================
-def get_finnhub_industry(symbol: str):
+def get_finnhub_profile(symbol: str):
     try:
         url = "https://finnhub.io/api/v1/stock/profile2"
         resp = requests.get(
@@ -268,13 +268,24 @@ def get_finnhub_industry(symbol: str):
             timeout=5
         ).json()
 
-        return (
-            resp.get("finnhubIndustry") or "Unknown",
-            resp.get("sector") or "Unknown"
-        )
+        name = resp.get("name")
+
+        # Finnhub sometimes returns the ticker or no name at all.
+        if not name or name.upper() == symbol.upper():
+            name = get_company_name(symbol)
+
+        return {
+            "company_name": name,
+            "industry": resp.get("finnhubIndustry") or "Unknown",
+            "sector": resp.get("sector") or "Unknown"
+        }
 
     except Exception:
-        return "Unknown", "Unknown"
+        return {
+            "company_name": symbol,
+            "industry": "Unknown",
+            "sector": "Unknown"
+        }
 
 
 # ===================================================
@@ -784,7 +795,6 @@ def lookup(name: str):
     ticker_active = ticker_is_active(ticker)
     exchange = get_exchange(ticker)
 
-    company_name = get_company_name(ticker)
     
     # ===================================================
     # Price snapshot
@@ -801,9 +811,14 @@ def lookup(name: str):
     # ===================================================
     # Industry resolution
     # ===================================================
-    fin_industry, fin_sector = get_finnhub_industry(ticker)
+    finnhub_profile = get_finnhub_profile(ticker)
+
+    company_name = finnhub_profile.get("company_name")
+    fin_industry = finnhub_profile.get("industry")
+    fin_sector = finnhub_profile.get("sector")
 
     llm_result = map_industry_llm(fin_industry, fin_sector)
+    
     industry_used, confidence = resolve_industry(fin_industry, fin_sector, llm_result)
 
     peers = company_profile.get("peers", [])
