@@ -151,7 +151,32 @@ async function analyzeStock() {
         document.getElementById("pe").textContent = data.pe ? Number(data.pe).toFixed(2) : "—";
         document.getElementById("industry").textContent = data.industry_used ?? "—";
         document.getElementById("peerMedian").textContent = data.peer_median_pe ? Number(data.peer_median_pe).toFixed(2) : "—";
-        document.getElementById("rating").textContent = data.assessment?.rating ?? "—";
+        const ratingElement = document.getElementById("rating");
+
+        ratingElement.textContent = data.assessment?.rating ?? "—";
+
+        ratingElement.className = "";
+
+        switch (data.assessment?.rating) {
+
+            case "Undervalued":
+                ratingElement.classList.add("rating-green");
+                break;
+
+            case "Fairly Valued":
+                ratingElement.classList.add("rating-blue");
+                break;
+
+            case "Overvalued":
+                ratingElement.classList.add("rating-red");
+                break;
+
+            case "Not Meaningful":
+            case "Inactive":
+            case "Unknown":
+                ratingElement.classList.add("rating-orange");
+                break;
+        }
 
         document.getElementById("peHelpContent").innerHTML = `
             <h2>What is the P/E Ratio?</h2>
