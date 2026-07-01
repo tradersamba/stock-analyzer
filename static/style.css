@@ -64,7 +64,7 @@ header p {
 }
 
 .search-box input {
-    flex: 1;
+    flex: 1.5;
     padding: 12px;
     font-size: 16px;
     background: #31363d;
@@ -74,12 +74,6 @@ header p {
 
 .search-box input::placeholder {
     color: #999;
-}
-
-.search-box input {
-    flex: 1;
-    padding: 12px;
-    font-size: 16px;
 }
 
 .search-box button {
