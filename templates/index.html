@@ -30,7 +30,6 @@
                 <div>P/E</div><div id="pe">—</div>
                 <div>Industry</div><div id="industry">—</div>
                 <div>Peer Median P/E</div><div id="peerMedian">—</div>
-                <div>Rating</div><div id="rating">—</div>
             </div>
         </section>
 
@@ -151,32 +150,7 @@ async function analyzeStock() {
         document.getElementById("pe").textContent = data.pe ? Number(data.pe).toFixed(2) : "—";
         document.getElementById("industry").textContent = data.industry_used ?? "—";
         document.getElementById("peerMedian").textContent = data.peer_median_pe ? Number(data.peer_median_pe).toFixed(2) : "—";
-        const ratingElement = document.getElementById("rating");
-
-        ratingElement.textContent = data.assessment?.rating ?? "—";
-
-        ratingElement.className = "";
-
-        switch (data.assessment?.rating) {
-
-            case "Undervalued":
-                ratingElement.classList.add("rating-green");
-                break;
-
-            case "Fairly Valued":
-                ratingElement.classList.add("rating-blue");
-                break;
-
-            case "Overvalued":
-                ratingElement.classList.add("rating-red");
-                break;
-
-            case "Not Meaningful":
-            case "Inactive":
-            case "Unknown":
-                ratingElement.classList.add("rating-orange");
-                break;
-        }
+        
 
         document.getElementById("peHelpContent").innerHTML = `
             <h2>What is the P/E Ratio?</h2>
@@ -218,8 +192,20 @@ async function analyzeStock() {
             ? data.peers.map(p => `<span>${p}</span>`).join("")
             : "—";
 
+        const rating = data.assessment?.rating ?? "Unknown";
+
+        let ratingClass = "rating-orange";
+
+        if (rating === "Undervalued")
+            ratingClass = "rating-green";
+        else if (rating === "Overvalued")
+            ratingClass = "rating-red";
+        else if (rating === "Fairly Valued")
+            ratingClass = "rating-blue";
+
         document.getElementById("assessment").innerHTML = `
-            <h3>${data.assessment?.rating ?? "Unknown"}</h3>
+            <h3 class="${ratingClass}">${rating}</h3>
+
             <p>${data.assessment?.explanation ?? "No explanation available."}</p>
 
             <hr>
