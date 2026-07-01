@@ -279,3 +279,23 @@ header p {
     bottom: auto;
     top: 125%;
 }
+
+.rating-green{
+    color: var(--green);
+    font-weight:bold;
+}
+
+.rating-red{
+    color: var(--red);
+    font-weight:bold;
+}
+
+.rating-blue{
+    color: var(--accent-blue);
+    font-weight:bold;
+}
+
+.rating-orange{
+    color: var(--orange);
+    font-weight:bold;
+}
