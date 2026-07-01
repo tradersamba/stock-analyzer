@@ -15,8 +15,10 @@
 
 .analyzing {
     animation: pulse 1s infinite ease-in-out;
+    font-size: 1.5em;
+    font-weight: bold;
+    color: var(--accent-blue);
 }
-
 * {
     box-sizing: border-box;
 }
@@ -122,19 +124,14 @@ header p {
     color: #9fb3c8;
 }
 
-.peer-list span {
-    background: #3b4552;
-    color: white;
-    padding: 6px 10px;
-    border-radius: 16px;
-    font-size: 14px;
-}
 
 .peer-list span {
-    background: #eef2f7;
+    background: #d7dde5;
+    color: #1b1f24;
     padding: 6px 10px;
     border-radius: 16px;
     font-size: 14px;
+    font-weight: 600;
 }
 
 .assessment-panel {
