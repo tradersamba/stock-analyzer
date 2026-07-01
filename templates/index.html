@@ -23,6 +23,7 @@
             <h2>Company Information</h2>
 
             <div class="info-grid">
+                <div>Company</div><div id="companyName">—</div>
                 <div>Ticker</div><div id="ticker">—</div>
                 <div>Exchange</div><div id="exchange">—</div>
                 <div>Price</div><div id="price">—</div>
@@ -123,6 +124,7 @@ async function analyzeStock() {
         const data = await response.json();
 
         if (!data.ticker) {
+            document.getElementById("companyName").textContent = "—";
             document.getElementById("ticker").textContent = "—";
             document.getElementById("exchange").textContent = "—";
             document.getElementById("price").textContent = "—";
@@ -130,7 +132,6 @@ async function analyzeStock() {
             document.getElementById("pe").textContent = "—";
             document.getElementById("industry").textContent = "—";
             document.getElementById("peerMedian").textContent = "—";
-            document.getElementById("rating").textContent = data.assessment?.rating ?? "Unknown";
             document.getElementById("peers").innerHTML = "—";
 
             document.getElementById("assessment").innerHTML = `
@@ -154,6 +155,8 @@ async function analyzeStock() {
             return;
         }
 
+        document.getElementById("companyName").textContent =
+            data.company_name ?? "—";
         document.getElementById("ticker").textContent = data.ticker ?? "—";
         document.getElementById("exchange").textContent = data.exchange ?? "—";
         document.getElementById("price").textContent = data.price ? "$" + Number(data.price).toFixed(2) : "—";
