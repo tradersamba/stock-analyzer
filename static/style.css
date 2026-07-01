@@ -17,8 +17,9 @@
     animation: pulse 1s infinite ease-in-out;
     font-size: 1.5em;
     font-weight: bold;
-    color: var(--accent-blue);
+    color: #ffd54a;
 }
+
 * {
     box-sizing: border-box;
 }
@@ -215,9 +216,8 @@ header p {
 ========================================== */
 
 .tooltip {
-    position: relative;
-    display: inline-block;
-    border-bottom: 1px dotted #666;
+    color: var(--accent-blue);
+    border-bottom: 1px dotted var(--accent-blue);
     cursor: help;
 }
 
@@ -228,9 +228,10 @@ header p {
 
     width: 300px;
 
-    background: #333;
-    color: #fff;
-
+    background: #f8f9fb;
+    color: #222;
+    border: 1px solid #c8d0da;
+    
     border-radius: 8px;
     padding: 12px;
 
