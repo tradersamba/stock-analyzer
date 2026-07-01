@@ -698,6 +698,12 @@ Rules:
         validated_peers = []
 
         for p in raw_peers:
+
+            # Never compare a company against itself.
+            if p.upper() == ticker.upper():
+                print(f"[PEER REMOVED] {p} is the target company", flush=True)
+                continue
+                
             price = get_finnhub_price(p)
 
             if price is not None and price > 0:
