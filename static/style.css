@@ -64,7 +64,7 @@ header p {
 }
 
 .search-box input {
-    flex: 1.5;
+    flex: 1;
     padding: 12px;
     font-size: 16px;
     background: #31363d;
@@ -77,13 +77,15 @@ header p {
 }
 
 .search-box button {
-    padding: 12px 24px;
+    width: 130px;
+    padding: 12px;
     font-size: 16px;
     cursor: pointer;
     background: #3d7bfd;
     color: white;
     border: none;
     border-radius: 6px;
+    flex-shrink: 0;
 }
 
 .search-box button:hover {
@@ -307,7 +309,7 @@ header p {
 }
 
 .disclaimer {
-    font-size: 12px;
+    font-size: 14px;
     color: #ffcc66;
     background: rgba(255, 152, 0, 0.12);
     border-left: 4px solid var(--orange);
