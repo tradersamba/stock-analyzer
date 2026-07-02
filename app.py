@@ -426,6 +426,7 @@ def resolve_industry(raw_industry, sector, llm_result):
 # ===================================================
 
 EPS_CACHE = {}
+PB_CACHE = {}
 FINNHUB_PRICE_CACHE = {}
 SNAPSHOT_CACHE = {}
 
@@ -486,6 +487,42 @@ def get_eps(symbol):
 
     except Exception as e:
         print(f"[EPS ERROR] {symbol} {repr(e)}", flush=True)
+        return None
+
+# ===================================================
+# Price per book
+# ===================================================
+def get_pb(symbol):
+
+    if symbol in PB_CACHE:
+        print(f"[PB CACHE HIT] {symbol} -> {PB_CACHE[symbol]}", flush=True)
+        return PB_CACHE[symbol]
+
+    try:
+        url = "https://finnhub.io/api/v1/stock/metric"
+
+        resp = requests.get(
+            url,
+            params={
+                "symbol": symbol,
+                "metric": "all",
+                "token": FINNHUB_API_KEY
+            },
+            timeout=5
+        ).json()
+
+        metric = resp.get("metric", {})
+
+        pb = metric.get("pbAnnual") or metric.get("pbQuarterly")
+
+        PB_CACHE[symbol] = pb
+
+        print(f"[PB CACHE SAVE] {symbol} -> {pb}", flush=True)
+
+        return pb
+
+    except Exception as e:
+        print(f"[PB ERROR] {symbol} {repr(e)}", flush=True)
         return None
 
 # ===================================================
@@ -813,7 +850,9 @@ def lookup(name: str):
     )
 
     eps = get_eps(ticker)
-    pe = compute_pe(price, eps)
+    pe = compute_pe(price, eps)        
+    pb = get_pb(ticker)
+    
     # ===================================================
     # Industry resolution
     # ===================================================
