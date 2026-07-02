@@ -232,14 +232,31 @@ async function analyzeStock() {
         else if (rating === "Fairly Valued")
             ratingClass = "rating-blue";
 
+        const pbRating = data.pb_assessment?.rating ?? "Unknown";
+        
+        let pbRatingClass = "rating-orange";
+        
+        if (pbRating === "Undervalued")
+            pbRatingClass = "rating-green";
+        else if (pbRating === "Overvalued")
+            pbRatingClass = "rating-red";
+        else if (pbRating === "Fairly Valued")
+            pbRatingClass = "rating-blue";
+        
         document.getElementById("assessment").innerHTML = `
             <h3>P/E Ratio</h3>
-    
+        
             <h3 class="${ratingClass}">${rating}</h3>
-
-            <p>${data.assessment?.explanation ?? "No explanation available."}</p>
-
+        
+            <p>${data.pe_assessment?.explanation ?? data.assessment?.explanation ?? "No explanation available."}</p>
+        
             <hr class="analysis-divider">
+        
+            <h3>P/B Ratio</h3>
+        
+            <h3 class="${pbRatingClass}">${pbRating}</h3>
+        
+            <p>${data.pb_assessment?.explanation ?? "No P/B explanation available."}</p>
         `;
 
     } 
