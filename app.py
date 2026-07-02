@@ -96,6 +96,38 @@ def median(vals):
         return None
     return float(np.median(np.array(vals)))
 
+def evaluate_valuation_metric(value, peer_median, label):
+    if value is None:
+        return {
+            "rating": "Unknown",
+            "explanation": f"Insufficient {label} data"
+        }
+
+    if value <= 0:
+        return {
+            "rating": "Not Meaningful",
+            "explanation": f"{label} is not meaningful because the value is zero or negative."
+        }
+
+    if peer_median is None:
+        return {
+            "rating": "Unknown",
+            "explanation": f"Insufficient peer {label} data"
+        }
+
+    ratio = value / peer_median
+
+    if ratio < 0.8:
+        rating = "Undervalued"
+    elif ratio > 1.2:
+        rating = "Overvalued"
+    else:
+        rating = "Fairly Valued"
+
+    return {
+        "rating": rating,
+        "explanation": f"{label} {value:.2f} vs peer median {peer_median:.2f}"
+    }
 
 def clean_name(name: str):
     return re.sub(r"[^a-zA-Z ]", "", name).strip()
@@ -875,22 +907,41 @@ def lookup(name: str):
     # ===================================================
     # Peer valuation
     # ===================================================
+
     valuation_peers = []
     excluded_peers = []
     peer_pes = []
+    peer_pbs = []
 
     for p in peers:
         peer_price = get_finnhub_price(p)
-        peer_eps = get_eps(p)
-        v = compute_pe(peer_price, peer_eps)
 
-        if v is not None and v > 0:
+        # ----- P/E -----
+        peer_eps = get_eps(p)
+        peer_pe = compute_pe(peer_price, peer_eps)
+
+        # ----- P/B -----
+        peer_pb = get_pb(p)
+
+        valid = False
+
+        if peer_pe is not None and peer_pe > 0:
+            peer_pes.append(peer_pe)
+            valid = True
+    
+        if peer_pb is not None and peer_pb > 0:
+            peer_pbs.append(peer_pb)
+            valid = True
+    
+        if valid:
             valuation_peers.append(p)
-            peer_pes.append(v)
         else:
             excluded_peers.append(p)
-
+        
     peer_median = median(peer_pes)
+    peer_pb_median = median(peer_pbs)
+    pe_assessment = evaluate_valuation_metric(pe, peer_median, "P/E")
+    pb_assessment = evaluate_valuation_metric(pb, peer_pb_median, "P/B")
 
     is_bankrupt = ticker.upper().endswith("Q")
 
@@ -911,6 +962,7 @@ def lookup(name: str):
             "price": price,
             "eps": eps,
             "pe": pe,
+            "pb": pb,
             "industry_raw": fin_industry,
             "industry_sector": fin_sector,
             "industry_used": company_profile.get("industry_sector", industry_used),
@@ -920,6 +972,9 @@ def lookup(name: str):
             "valuation_peers": valuation_peers,
             "excluded_peers": excluded_peers,
             "peer_median_pe": peer_median,
+            "peer_median_pb": peer_pb_median,
+            "pe_assessment": pe_assessment,
+            "pb_assessment": pb_assessment,
             "assessment": {
                 "rating": rating,
                 "explanation": explanation
@@ -944,6 +999,7 @@ def lookup(name: str):
             "price": price,
             "eps": eps,
             "pe": pe,
+            "pb": pb,
             "industry_raw": fin_industry,
             "industry_sector": fin_sector,
             "industry_used": company_profile.get("industry_sector", industry_used),
@@ -955,40 +1011,29 @@ def lookup(name: str):
             "valuation_peers": valuation_peers,
             "excluded_peers": excluded_peers,
             "peer_median_pe": peer_median,
+            "peer_median_pb": peer_pb_median,
+            "pe_assessment": pe_assessment,
+            "pb_assessment": pb_assessment,
             "assessment": {
                 "rating": rating,
                 "explanation": explanation
             }
         }
+
     # ===================================================
-    # Rating logic (FIXED: negative EPS handling)
+    # Rating logic
     # ===================================================
-    if pe is None:
-        rating = "Unknown"
-        explanation = "Insufficient data"
-
-    elif eps is not None and eps < 0:
-        rating = "Not Meaningful"
-        explanation = (
-            "EPS is negative, which means the company is not currently profitable. "
-            "The P/E ratio is not a meaningful valuation metric in this case."
-        )
-
-    elif peer_median is None:
-        rating = "Unknown"
-        explanation = "Insufficient peer data"
-
-    else:
-        ratio = pe / peer_median
-
-        if ratio < 0.8:
-            rating = "Undervalued"
-        elif ratio > 1.2:
-            rating = "Overvalued"
-        else:
-            rating = "Fairly Valued"
-
-        explanation = f"PE {pe:.2f} vs peer median {peer_median:.2f}"
+    if eps is not None and eps < 0:
+        pe_assessment = {
+            "rating": "Not Meaningful",
+            "explanation": (
+                "EPS is negative, which means the company is not currently profitable. "
+                "The P/E ratio is not a meaningful valuation metric in this case."
+            )
+        }
+    
+    rating = pe_assessment["rating"]
+    explanation = pe_assessment["explanation"]
 
     # ===================================================
     # Response
@@ -1001,7 +1046,7 @@ def lookup(name: str):
         "price": price,
         "eps": eps,
         "pe": pe,
-
+        "pb": pb,
         "industry_raw": fin_industry,
         "industry_sector": fin_sector,
         "industry_used": company_profile.get("industry_sector", industry_used),
@@ -1012,6 +1057,9 @@ def lookup(name: str):
         "valuation_peers": valuation_peers,
         "excluded_peers": excluded_peers,
         "peer_median_pe": peer_median,
+        "peer_median_pb": peer_pb_median,
+        "pe_assessment": pe_assessment,
+        "pb_assessment": pb_assessment,
 
         "assessment": {
             "rating": rating,
