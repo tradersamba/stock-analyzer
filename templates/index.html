@@ -10,16 +10,17 @@
 <div class="app">
 
     <header>
-        <h1>The Stock Analyzer (by C2Believe)</h1>
-        <p>Analyze stocks like a Pro</p>
+        <h1>The Stock Analyzer</h1>
+        <p>Analyze Stocks Like a Pro (by C2Believe)</p>
     </header>
 
     <section class="search-box">
         <input id="companyInput" type="text" placeholder="Enter company or ticker name, e.g. Apple" onkeydown="if(event.key === 'Enter') analyzeStock()">
         <button onclick="analyzeStock()">Analyze</button>
+        <span id="statusMessage"></span>
     </section>
 
-     <div class="disclaimer">
+    <div class="disclaimer">
         <strong>Disclaimer:</strong> Investing in stocks carries risk. Use the information provided below at your own discretion. This tool is intended for informational purposes only and does not constitute financial advice.
     </div>
 
@@ -123,11 +124,15 @@ async function analyzeStock() {
         return;
     }
 
-    document.getElementById("assessment").innerHTML =
-    '<span class="analyzing">Analyzing now...</span>';
+    const status = document.getElementById("statusMessage");
+    status.textContent = "Analyzing valuation...";
+    status.classList.add("analyzing");
+    
     try {
         const response = await fetch(`/lookup?name=${encodeURIComponent(name)}`);
         const data = await response.json();
+        status.textContent = "";
+        status.classList.remove("analyzing");
 
         if (!data.ticker) {
             document.getElementById("companyName").textContent = "—";
@@ -238,6 +243,8 @@ async function analyzeStock() {
     } 
     
     catch (error) {
+        status.textContent = "";
+        status.classList.remove("analyzing");
         console.error(error);
         document.getElementById("assessment").innerHTML =
             "Error analyzing stock.<br><br>" + error.message;
