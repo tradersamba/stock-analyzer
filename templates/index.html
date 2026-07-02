@@ -233,11 +233,13 @@ async function analyzeStock() {
             ratingClass = "rating-blue";
 
         document.getElementById("assessment").innerHTML = `
+            <h3>P/E Ratio</h3>
+    
             <h3 class="${ratingClass}">${rating}</h3>
 
             <p>${data.assessment?.explanation ?? "No explanation available."}</p>
 
-            <hr>
+            <hr class="analysis-divider">
         `;
 
     } 
