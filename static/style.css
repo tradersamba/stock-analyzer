@@ -322,3 +322,92 @@ header p {
     border-radius: 6px;
     line-height: 1.4;
 }
+
+/* ======================================================
+   Mobile Layout
+====================================================== */
+
+@media (max-width: 700px) {
+
+    .app {
+        width: 100%;
+        padding: 12px;
+        gap: 12px;
+    }
+
+    header h1 {
+        font-size: 24px;
+    }
+
+    header p {
+        font-size: 14px;
+    }
+
+    .search-box {
+        flex-direction: column;
+    }
+
+    .search-box button {
+        width: 100%;
+    }
+
+    .dashboard {
+        grid-template-columns: 1fr;
+    }
+
+    .analysis-row {
+        grid-template-columns: 1fr !important;
+        gap: 14px;
+        margin-top: 14px;
+    }
+
+    .left-panel,
+    .right-panel,
+    .assessment-panel,
+    .pe-help-panel {
+        width: 100%;
+        padding: 14px;
+    }
+
+    .info-grid {
+        grid-template-columns: 120px 1fr;
+        font-size: 15px;
+        gap: 8px;
+    }
+
+    .assessment-panel,
+    .pe-help-panel {
+        height: auto;
+        min-height: 260px;
+        max-height: none;
+    }
+
+    .assessment-scroll,
+    .pe-help-scroll {
+        max-height: 320px;
+        overflow-y: auto;
+    }
+
+    .peer-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .peer-list span {
+        font-size: 13px;
+        padding: 6px 9px;
+    }
+
+    .tooltip-popup {
+        width: 260px;
+        right: auto;
+        left: 0;
+        top: 125%;
+        transform: none;
+    }
+
+    .disclaimer {
+        font-size: 13px;
+    }
+}
