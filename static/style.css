@@ -68,7 +68,7 @@ header h1 {
 .left-panel h2,
 .right-panel h2,
 .assessment-panel h2,
-.pe-help-panel h2 {
+.help-panel h2 {
     color: var(--accent-blue);
 }
 
@@ -180,7 +180,7 @@ header p {
     flex:2;
 }
 
-.pe-help-panel {
+.help-panel {
     background: #2a2f36;
     border-radius: 10px;
     padding: 18px;
@@ -191,18 +191,18 @@ header p {
     flex-direction: column;
 }
 
-.pe-help-scroll {
+.help-scroll {
     flex: 1;
     overflow-y: auto;
     padding-right: 10px;
     line-height: 1.6;
 }
 
-.pe-help-panel h2{
+.help-panel h2{
     margin-top:0;
 }
 
-.pe-help-panel p{
+.help-panel p{
     margin-bottom:14px;
 }
 
@@ -275,13 +275,13 @@ header p {
 }
 
 .assessment-panel,
-.pe-help-panel {
+.help-panel {
     height: 475px;   /* adjust this value */
     min-height: 0;
 }
 
 .assessment-scroll,
-.pe-help-scroll {
+.help-scroll {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
@@ -378,7 +378,7 @@ header p {
     .left-panel,
     .right-panel,
     .assessment-panel,
-    .pe-help-panel {
+    .help-panel {
         width: 100%;
         padding: 14px;
     }
@@ -390,14 +390,14 @@ header p {
     }
 
     .assessment-panel,
-    .pe-help-panel {
+    .help-panel {
         height: auto;
         min-height: 260px;
         max-height: none;
     }
 
     .assessment-scroll,
-    .pe-help-scroll {
+    .help-scroll {
         max-height: 320px;
         overflow-y: auto;
     }
