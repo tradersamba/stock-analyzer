@@ -1008,8 +1008,6 @@ def lookup(name: str):
             "candidate_peers": peers,
             "valuation_peers": valuation_peers,
             "excluded_peers": excluded_peers,
-            "valuation_peers": valuation_peers,
-            "excluded_peers": excluded_peers,
             "peer_median_pe": peer_median,
             "peer_median_pb": peer_pb_median,
             "pe_assessment": pe_assessment,
