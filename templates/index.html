@@ -57,8 +57,8 @@
         </div>
     </div>
 
-    <div class="pe-help-panel">
-        <div id="peHelpContent" class="pe-help-scroll">
+    <div class="help-panel">
+        <div id="peHelpContent" class="help-scroll">
             <div class="description-placeholder">P/E Description</div>
         </div>
     </div>
@@ -74,8 +74,8 @@
         </div>
     </div>
 
-    <div class="pe-help-panel">
-        <div id="pbHelpContent" class="pe-help-scroll">
+    <div class="help-panel">
+        <div id="pbHelpContent" class="help-scroll">
             <div class="description-placeholder">P/B Description</div>
         </div>
     </div>
@@ -274,7 +274,32 @@ async function analyzeStock() {
             <p>${data.pb_assessment?.explanation ??
                 "No P/B explanation available."}</p>
         `;
-
+        
+        document.getElementById("pbHelpContent").innerHTML = `
+            <h2>What is the P/B Ratio?</h2>
+        
+            <p>
+                The Price-to-Book (P/B) ratio compares a company's market value to its book value.
+            </p>
+        
+            <p>
+                <strong>
+                    P/B = Stock Price ÷ Book Value Per Share
+                </strong>
+            </p>
+        
+            <p>
+                Book value represents the company's net assets after subtracting liabilities.
+            </p>
+        
+            <p>
+                A lower P/B ratio may indicate a stock is undervalued relative to the company's net assets, while a higher P/B ratio suggests investors are paying a premium.
+            </p>
+        
+            <p>
+                As with P/E, P/B is most meaningful when compared with companies in the same industry.
+            </p>
+        `;
     } 
     
     catch (error) {
