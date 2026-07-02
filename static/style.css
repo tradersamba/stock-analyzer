@@ -427,3 +427,9 @@ header p {
         padding: 8px 10px;
     }
 }
+
+.analysis-divider {
+    border: none;
+    border-top: 1px solid #555;
+    margin: 18px 0;
+}
